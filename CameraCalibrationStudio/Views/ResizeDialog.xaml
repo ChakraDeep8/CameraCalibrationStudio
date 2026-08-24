@@ -1,0 +1,25 @@
+<Window x:Class="CameraCalibrationStudio.Views.ResizeDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Resize Image" Height="220" Width="320"
+        WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
+        Background="{StaticResource AppBackground}" FontFamily="Segoe UI">
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        <TextBlock Text="Width (px)" Foreground="{StaticResource TextSecondary}" Margin="0,0,0,4"/>
+        <TextBox x:Name="WidthBox" Grid.Row="1" Style="{StaticResource InputBox}" Margin="0,0,0,12"/>
+        <TextBlock Grid.Row="2" Text="Height (px)" Foreground="{StaticResource TextSecondary}" Margin="0,0,0,4"/>
+        <TextBox x:Name="HeightBox" Grid.Row="3" Style="{StaticResource InputBox}" Margin="0,0,0,12"/>
+        <StackPanel Grid.Row="5" Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button Content="Cancel" Width="90" Height="32" Margin="0,0,8,0" Click="Cancel_Click" Style="{StaticResource ToolButton}"/>
+            <Button Content="Resize" Width="90" Height="32" Click="Ok_Click" Style="{StaticResource ToolButton}"/>
+        </StackPanel>
+    </Grid>
+</Window>

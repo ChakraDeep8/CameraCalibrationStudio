@@ -1,0 +1,217 @@
+<UserControl x:Class="CameraCalibrationStudio.Views.RoiCalibrationView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:CameraCalibrationStudio.Controls"
+             Focusable="False" PreviewKeyDown="RoiCalibrationView_PreviewKeyDown">
+    <DockPanel LastChildFill="True">
+
+        <!-- Toolbar: only actions needed repeatedly while working. Everything else lives
+             under Help (title bar) or inside the collapsible sections below. -->
+        <Border DockPanel.Dock="Top" Background="{StaticResource AppBackground}" Padding="12,10">
+            <StackPanel Orientation="Horizontal">
+                <Border Style="{StaticResource ToolbarGroup}">
+                    <StackPanel Orientation="Horizontal">
+                        <Button Content="Open Image" ToolTip="Ctrl+O" Click="OpenImage_Click" Style="{StaticResource ToolButton}"/>
+                        <Button Content="Batch…" Click="Batch_Click" Style="{StaticResource ToolButton}"/>
+                        <Button Content="Grab Frame from RTSP…" Click="GrabRtsp_Click" Style="{StaticResource ToolButton}"/>
+                        <Button Content="Open Calibration" Click="OpenCalibration_Click" Style="{StaticResource ToolButton}"/>
+                        <Button Content="Save Calibration" ToolTip="Ctrl+S" Click="SaveCalibration_Click" Style="{StaticResource PrimaryButton}"/>
+                    </StackPanel>
+                </Border>
+                <Border Style="{StaticResource ToolbarGroup}">
+                    <StackPanel Orientation="Horizontal">
+                        <Button Content="Undo" ToolTip="Ctrl+Z" Click="Undo_Click" Style="{StaticResource ToolButton}"/>
+                        <Button Content="Redo" ToolTip="Ctrl+Y" Click="Redo_Click" Style="{StaticResource ToolButton}"/>
+                    </StackPanel>
+                </Border>
+                <Border Style="{StaticResource ToolbarGroup}">
+                    <StackPanel Orientation="Horizontal">
+                        <Button Content="Fit" ToolTip="F" Click="Fit_Click" Style="{StaticResource ToolButton}"/>
+                        <Button Content="100%" ToolTip="1" Click="Zoom100_Click" Style="{StaticResource ToolButton}"/>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </Border>
+
+        <!-- Bottom: status bar (thin, fixed — never competes with primary controls for height) -->
+        <Border DockPanel.Dock="Bottom" Background="#17171C" Padding="12,6">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock x:Name="StatusText" Text="Open an image to begin." Foreground="{StaticResource TextSecondary}" FontSize="11.5" VerticalAlignment="Center"/>
+                <TextBlock x:Name="SavedStateText" Grid.Column="1" Text="" Foreground="{StaticResource TextSecondary}" FontSize="11.5" VerticalAlignment="Center"/>
+            </Grid>
+        </Border>
+
+        <!-- Everything between the toolbar and status bar fills all remaining height.
+             Only the left sidebar scrolls internally if its content is tall; the canvas
+             and JSON panel always keep their full height. -->
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition x:Name="LeftColumn" Width="240"/>
+                <ColumnDefinition Width="6"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="6"/>
+                <ColumnDefinition x:Name="JsonColumn" Width="360"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Left: draw tools + objects + adjustments + color + batch -->
+            <Border Grid.Column="0" Background="{StaticResource PanelBackground}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel Margin="10">
+
+                        <TextBlock Text="DRAW ROI" Style="{StaticResource SectionLabel}" Margin="0,0,0,6"/>
+                        <StackPanel>
+                            <RadioButton x:Name="ToolRectangle" Content="▭  Rectangle" GroupName="Tools" Style="{StaticResource ToolRadioButton}" Checked="Tool_Checked"/>
+                            <RadioButton x:Name="ToolSquare" Content="□  Square" GroupName="Tools" Style="{StaticResource ToolRadioButton}" Checked="Tool_Checked"/>
+                            <RadioButton x:Name="ToolPolygon" Content="⬠  Polygon" GroupName="Tools" Style="{StaticResource ToolRadioButton}" Checked="Tool_Checked"/>
+                            <RadioButton x:Name="ToolLine" Content="╱  Line" GroupName="Tools" Style="{StaticResource ToolRadioButton}" Checked="Tool_Checked"/>
+                            <RadioButton x:Name="ToolPan" Content="✋  Pan" GroupName="Tools" Style="{StaticResource ToolRadioButton}" Checked="Tool_Checked"/>
+                        </StackPanel>
+                        <TextBlock x:Name="ToolHintText" Text="Click an existing region to select, move, resize or rename it."
+                                   Foreground="{StaticResource TextSecondary}" FontSize="11" TextWrapping="Wrap" Margin="0,8,0,4"/>
+
+                        <Expander x:Name="ObjectsExpander" Header="CALIBRATION OBJECTS" IsExpanded="True" Foreground="{StaticResource TextSecondary}" FontSize="11" FontWeight="SemiBold" Margin="0,14,0,0">
+                            <ListBox x:Name="ObjectList" Background="Transparent" BorderThickness="0" Margin="0,8,0,0"
+                                     ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                                     ItemContainerStyle="{StaticResource ObjectListItem}"
+                                     SelectionChanged="ObjectList_SelectionChanged">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <CheckBox IsChecked="{Binding IsVisible, Mode=TwoWay}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                            <TextBlock Grid.Column="1" Text="{Binding Name}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" FontSize="12.5"
+                                                       Cursor="Hand" ToolTip="Double-click to rename" MouseLeftButtonDown="ObjectName_MouseLeftButtonDown"/>
+                                            <StackPanel Grid.Column="2" Orientation="Horizontal">
+                                                <TextBlock Text="✎" Foreground="{StaticResource TextSecondary}" Cursor="Hand" ToolTip="Rename"
+                                                           MouseLeftButtonDown="RenameObjectGlyph_MouseLeftButtonDown" Margin="6,0,0,0"/>
+                                                <TextBlock Text="⧉" Foreground="{StaticResource TextSecondary}" Cursor="Hand" ToolTip="Duplicate"
+                                                           MouseLeftButtonDown="DuplicateObjectGlyph_MouseLeftButtonDown" Margin="8,0,0,0"/>
+                                                <TextBlock Text="✕" Foreground="{StaticResource TextSecondary}" Cursor="Hand" ToolTip="Delete"
+                                                           MouseLeftButtonDown="DeleteObjectGlyph_MouseLeftButtonDown" Margin="8,0,2,0"/>
+                                            </StackPanel>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </Expander>
+
+                        <Expander x:Name="AdjustmentsExpander" Header="ADJUSTMENTS" IsExpanded="True" Foreground="{StaticResource TextSecondary}" FontSize="11" FontWeight="SemiBold" Margin="0,14,0,0">
+                            <StackPanel Margin="0,8,0,0">
+                                <TextBlock Text="Preview only — never changes calibration coordinates." Foreground="{StaticResource TextSecondary}" FontSize="10" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                                <Grid Margin="0,0,0,2">
+                                    <TextBlock Text="Brightness" Foreground="{StaticResource TextSecondary}" FontSize="11" HorizontalAlignment="Left"/>
+                                    <TextBlock x:Name="BrightnessValueText" Text="0" Foreground="{StaticResource TextSecondary}" FontSize="11" HorizontalAlignment="Right"/>
+                                </Grid>
+                                <Slider x:Name="BrightnessSlider" Minimum="-100" Maximum="100" Value="0" ValueChanged="Adjustment_ValueChanged" Margin="0,0,0,6"/>
+                                <Grid Margin="0,0,0,2">
+                                    <TextBlock Text="Contrast" Foreground="{StaticResource TextSecondary}" FontSize="11" HorizontalAlignment="Left"/>
+                                    <TextBlock x:Name="ContrastValueText" Text="0" Foreground="{StaticResource TextSecondary}" FontSize="11" HorizontalAlignment="Right"/>
+                                </Grid>
+                                <Slider x:Name="ContrastSlider" Minimum="-100" Maximum="100" Value="0" ValueChanged="Adjustment_ValueChanged" Margin="0,0,0,6"/>
+                                <Grid Margin="0,0,0,2">
+                                    <TextBlock Text="Sharpness" Foreground="{StaticResource TextSecondary}" FontSize="11" HorizontalAlignment="Left"/>
+                                    <TextBlock x:Name="SharpnessValueText" Text="100" Foreground="{StaticResource TextSecondary}" FontSize="11" HorizontalAlignment="Right"/>
+                                </Grid>
+                                <Slider x:Name="SharpnessSlider" Minimum="0" Maximum="200" Value="100" ValueChanged="Adjustment_ValueChanged" Margin="0,0,0,8"/>
+                                <Button Content="Reset Adjustments" Click="ResetAdjustments_Click" Style="{StaticResource ToolButton}" HorizontalAlignment="Stretch" Margin="0,0,0,8"/>
+                                <CheckBox x:Name="IncludeAdjustmentsInJsonCheck" IsChecked="True"
+                                          Foreground="{StaticResource TextPrimary}" FontSize="11"
+                                          Checked="IncludeInJson_Changed" Unchecked="IncludeInJson_Changed">
+                                    <TextBlock Text="Include these values in the calibration JSON" TextWrapping="Wrap" MaxWidth="190"/>
+                                </CheckBox>
+                            </StackPanel>
+                        </Expander>
+
+                        <Expander x:Name="ColorExpander" Header="COLOR CALIBRATION" IsExpanded="False" Foreground="{StaticResource TextSecondary}" FontSize="11" FontWeight="SemiBold" Margin="0,10,0,0">
+                            <StackPanel Margin="0,8,0,0">
+                                <CheckBox x:Name="AutoWhiteBalanceCheck" Content="Auto white balance" Foreground="{StaticResource TextPrimary}" FontSize="12" Margin="0,0,0,8" Checked="ColorAdjustment_Changed" Unchecked="ColorAdjustment_Changed"/>
+                                <Grid Margin="0,0,0,2">
+                                    <TextBlock Text="Temperature" Foreground="{StaticResource TextSecondary}" FontSize="11" HorizontalAlignment="Left"/>
+                                    <TextBlock x:Name="TemperatureValueText" Text="0" Foreground="{StaticResource TextSecondary}" FontSize="11" HorizontalAlignment="Right"/>
+                                </Grid>
+                                <Slider x:Name="TemperatureSlider" Minimum="-100" Maximum="100" Value="0" ValueChanged="Adjustment_ValueChanged" Margin="0,0,0,6"/>
+                                <Grid Margin="0,0,0,2">
+                                    <TextBlock Text="Saturation" Foreground="{StaticResource TextSecondary}" FontSize="11" HorizontalAlignment="Left"/>
+                                    <TextBlock x:Name="SaturationValueText" Text="0" Foreground="{StaticResource TextSecondary}" FontSize="11" HorizontalAlignment="Right"/>
+                                </Grid>
+                                <Slider x:Name="SaturationSlider" Minimum="-100" Maximum="100" Value="0" ValueChanged="Adjustment_ValueChanged" Margin="0,0,0,6"/>
+                                <Grid Margin="0,0,0,2">
+                                    <TextBlock Text="Exposure" Foreground="{StaticResource TextSecondary}" FontSize="11" HorizontalAlignment="Left"/>
+                                    <TextBlock x:Name="ExposureValueText" Text="0" Foreground="{StaticResource TextSecondary}" FontSize="11" HorizontalAlignment="Right"/>
+                                </Grid>
+                                <Slider x:Name="ExposureSlider" Minimum="-100" Maximum="100" Value="0" ValueChanged="Adjustment_ValueChanged" Margin="0,0,0,8"/>
+                                <Button Content="Reset Color" Click="ResetColor_Click" Style="{StaticResource ToolButton}" HorizontalAlignment="Stretch"/>
+                            </StackPanel>
+                        </Expander>
+                    </StackPanel>
+                </ScrollViewer>
+            </Border>
+
+            <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch" Background="Transparent"/>
+
+            <!-- Center: canvas -->
+            <Grid Grid.Column="2">
+                <controls:RoiCanvas x:Name="Canvas"/>
+
+                <!-- Empty state -->
+                <Border x:Name="EmptyState" Background="{StaticResource TileBackground}" CornerRadius="8" Margin="30"
+                        AllowDrop="True" Drop="EmptyState_Drop" DragOver="EmptyState_DragOver">
+                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="380">
+                        <TextBlock Text="Open a camera image" Foreground="{StaticResource TextPrimary}" FontSize="18" FontWeight="SemiBold" HorizontalAlignment="Center"/>
+                        <TextBlock Text="Draw calibration regions visually and export production-ready JSON."
+                                   Foreground="{StaticResource TextSecondary}" FontSize="12.5" TextWrapping="Wrap" TextAlignment="Center" Margin="0,10,0,18"/>
+                        <Button Content="Open Image" Click="OpenImage_Click" Style="{StaticResource ToolButton}" HorizontalAlignment="Center" Padding="20,9"/>
+                        <TextBlock Text="or drag an image here" Foreground="{StaticResource TextSecondary}" FontSize="11.5" HorizontalAlignment="Center" Margin="0,12,0,0"/>
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <GridSplitter x:Name="JsonSplitter" Grid.Column="3" Width="6" HorizontalAlignment="Stretch" Background="Transparent"/>
+
+            <!-- Right: live JSON (collapsible) -->
+            <Border x:Name="JsonPanel" Grid.Column="4" Background="{StaticResource PanelBackground}">
+                <DockPanel Margin="10">
+                    <Grid DockPanel.Dock="Top" Margin="0,0,0,6">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="CALIBRATION JSON" Style="{StaticResource SectionLabel}" Margin="0"/>
+                        <Button Grid.Column="1" x:Name="CollapseJsonButton" Content="›" FontSize="14" Width="26" Height="24" Padding="0"
+                                Click="CollapseJson_Click" Style="{StaticResource ToolButton}" ToolTip="Collapse panel"/>
+                    </Grid>
+
+                    <TextBox x:Name="JsonText" Background="#17171C" Foreground="{StaticResource TextPrimary}" BorderThickness="0"
+                             FontFamily="Consolas" FontSize="12" IsReadOnly="True" TextWrapping="NoWrap"
+                             VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" Padding="8"
+                             DockPanel.Dock="Top" Height="Auto" MinHeight="120"/>
+
+                    <Expander DockPanel.Dock="Bottom" Header="Production Export Settings" Foreground="{StaticResource TextSecondary}" Margin="0,8,0,0" FontSize="11.5">
+                        <StackPanel Margin="0,8,0,4">
+                            <TextBlock Text="Device ID" Foreground="{StaticResource TextSecondary}" FontSize="11"/>
+                            <TextBox x:Name="DeviceIdBox" Style="{StaticResource InputBox}" Margin="0,2,0,6" TextChanged="Meta_TextChanged"/>
+                            <TextBlock Text="Store code" Foreground="{StaticResource TextSecondary}" FontSize="11"/>
+                            <TextBox x:Name="StoreCodeBox" Style="{StaticResource InputBox}" Margin="0,2,0,6" TextChanged="Meta_TextChanged"/>
+                            <TextBlock Text="Area ID" Foreground="{StaticResource TextSecondary}" FontSize="11"/>
+                            <TextBox x:Name="AreaIdBox" Style="{StaticResource InputBox}" Margin="0,2,0,6" TextChanged="Meta_TextChanged"/>
+                            <Button Content="Export Production Zones JSON…" Click="ExportProduction_Click" Style="{StaticResource ToolButton}" HorizontalAlignment="Stretch" Margin="0,4,0,0"/>
+                        </StackPanel>
+                    </Expander>
+                </DockPanel>
+            </Border>
+
+            <!-- Slim strip shown when the JSON panel is collapsed, to reopen it -->
+            <Border x:Name="JsonCollapsedStrip" Grid.Column="4" Background="{StaticResource PanelBackground}" Width="28" HorizontalAlignment="Left" Visibility="Collapsed">
+                <Button Content="‹" FontSize="14" Click="CollapseJson_Click" Style="{StaticResource ToolButton}" Margin="0" VerticalAlignment="Top" Padding="0" Width="26" Height="24" HorizontalAlignment="Center"/>
+            </Border>
+        </Grid>
+    </DockPanel>
+</UserControl>

@@ -1,0 +1,226 @@
+<Window x:Class="CameraCalibrationStudio.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:views="clr-namespace:CameraCalibrationStudio.Views"
+        xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
+        Title="Camera Calibration &amp; Image Studio" Height="800" Width="1280" MinHeight="640" MinWidth="1100"
+        Background="{StaticResource AppBackground}" FontFamily="Segoe UI"
+        WindowStartupLocation="CenterScreen"
+        WindowState="Maximized"
+        WindowStyle="None" ResizeMode="CanResize" AllowsTransparency="False"
+        Icon="Assets/logo.png"
+        Closing="MainWindow_Closing"
+        StateChanged="MainWindow_StateChanged"
+        PreviewKeyDown="MainWindow_PreviewKeyDown">
+
+    <shell:WindowChrome.WindowChrome>
+        <shell:WindowChrome CaptionHeight="40" ResizeBorderThickness="6" GlassFrameThickness="0" CornerRadius="0" UseAeroCaptionButtons="False"/>
+    </shell:WindowChrome.WindowChrome>
+
+    <Border x:Name="RootBorder" Background="{StaticResource AppBackground}" BorderBrush="#000000" BorderThickness="1">
+        <DockPanel LastChildFill="True">
+
+            <!-- Custom title bar (caption area) -->
+            <Grid DockPanel.Dock="Top" Height="40" Background="{StaticResource ChromeBackground}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Orientation="Horizontal" Margin="14,0,0,0" VerticalAlignment="Center" shell:WindowChrome.IsHitTestVisibleInChrome="False">
+                    <Image Source="Assets/logo.png" Width="18" Height="18" Margin="0,0,9,0"/>
+                    <TextBlock Text="Camera Calibration &amp; Image Studio" Foreground="{StaticResource TextPrimary}"
+                               FontSize="12.5" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                </StackPanel>
+
+                <StackPanel Grid.Column="2" Orientation="Horizontal" shell:WindowChrome.IsHitTestVisibleInChrome="True">
+                    <Button x:Name="HelpTitleBarButton" Content="Help" FontFamily="Segoe UI" Foreground="{StaticResource TextSecondary}"
+                            Background="Transparent" BorderThickness="0" Padding="10,0" Height="40" Cursor="Hand" Click="HelpButton_Click"/>
+                    <Button x:Name="MinimizeButton" Content="&#xE921;" Style="{StaticResource WindowChromeButton}" Click="MinimizeButton_Click"/>
+                    <Button x:Name="RestoreButton" Content="&#xE922;" Style="{StaticResource WindowChromeButton}" Click="MaximizeRestoreButton_Click"/>
+                    <Button x:Name="CloseTitleBarButton" Content="&#xE8BB;" Style="{StaticResource WindowCloseButton}" Click="CloseButton_Click"/>
+                </StackPanel>
+            </Grid>
+
+            <!-- Tab strip + content: MainTabs is the DockPanel's fill child, so its content
+                 (canvas, editor, etc.) gets all remaining height. Only the header row itself
+                 gets the bottom divider / background via the template below. -->
+            <TabControl x:Name="MainTabs" Background="Transparent" BorderThickness="0" Padding="0"
+                        shell:WindowChrome.IsHitTestVisibleInChrome="True">
+                <TabControl.Template>
+                    <ControlTemplate TargetType="TabControl">
+                        <DockPanel>
+                            <Border DockPanel.Dock="Top" Background="{StaticResource AppBackground}" Padding="12,10"
+                                    BorderBrush="{StaticResource BorderSubtle}" BorderThickness="0,0,0,1">
+                                <StackPanel Orientation="Horizontal" IsItemsHost="True"/>
+                            </Border>
+                            <ContentPresenter x:Name="PART_SelectedContentHost" ContentSource="SelectedContent"/>
+                        </DockPanel>
+                    </ControlTemplate>
+                </TabControl.Template>
+
+                <!-- ============================ ROI CALIBRATION TAB (primary workflow) ============================ -->
+                <TabItem Header="ROI Calibration" Style="{StaticResource DarkTab}">
+                    <views:RoiCalibrationView x:Name="RoiView"/>
+                </TabItem>
+
+                <!-- ============================ EDITOR TAB ============================ -->
+                <TabItem Header="Image Editor" Style="{StaticResource DarkTab}">
+                    <DockPanel LastChildFill="True">
+
+                        <!-- Always-visible status bar -->
+                        <Border DockPanel.Dock="Bottom" Background="#17171C" Padding="12,6">
+                            <TextBlock x:Name="EditorStatusText" Text="Ready." Foreground="{StaticResource TextPrimary}" FontSize="11.5" TextWrapping="Wrap"/>
+                        </Border>
+
+                        <Grid Margin="10,10,10,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="238"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="216"/>
+                            </Grid.ColumnDefinitions>
+
+                            <!-- Left toolbox (independently scrollable) -->
+                            <ScrollViewer Grid.Column="0" Margin="0,0,10,0" VerticalScrollBarVisibility="Auto">
+                                <StackPanel>
+                                    <TextBlock Text="FILE" Style="{StaticResource SectionLabel}" Margin="0,0,0,4"/>
+                                    <Button Content="Open Image…" Click="OpenImage_Click" Style="{StaticResource ToolButton}" HorizontalAlignment="Stretch"/>
+                                    <Button Content="Grab Frame from RTSP…" Click="GrabRtspEditor_Click" Style="{StaticResource ToolButton}" HorizontalAlignment="Stretch"/>
+                                    <Button Content="Save As…" Click="SaveImage_Click" Style="{StaticResource ToolButton}" HorizontalAlignment="Stretch"/>
+                                    <Button Content="Undo" Click="Undo_Click" Style="{StaticResource ToolButton}" HorizontalAlignment="Stretch"/>
+
+                                    <TextBlock Text="TRANSFORM" Style="{StaticResource SectionLabel}"/>
+                                    <UniformGrid Columns="2">
+                                        <Button Content="Rotate ⟲" Click="RotateCcw_Click" Style="{StaticResource ToolButton}"/>
+                                        <Button Content="Rotate ⟳" Click="RotateCw_Click" Style="{StaticResource ToolButton}"/>
+                                        <Button Content="Flip ↔" Click="FlipH_Click" Style="{StaticResource ToolButton}"/>
+                                        <Button Content="Flip ↕" Click="FlipV_Click" Style="{StaticResource ToolButton}"/>
+                                    </UniformGrid>
+                                    <Button x:Name="CropModeButton" Content="Crop" Click="CropModeToggle_Click" Style="{StaticResource ToolButton}" HorizontalAlignment="Stretch"/>
+                                    <TextBlock x:Name="CropHintText" Text="Drag a rectangle on the image, then press Enter to crop (Esc to cancel)."
+                                               Foreground="{StaticResource TextSecondary}" FontSize="10" TextWrapping="Wrap" Visibility="Collapsed" Margin="0,2,0,4"/>
+                                    <Button Content="Resize…" Click="Resize_Click" Style="{StaticResource ToolButton}" HorizontalAlignment="Stretch"/>
+
+                                    <TextBlock Text="ADJUSTMENTS" Style="{StaticResource SectionLabel}"/>
+                                    <TextBlock Text="Real-time — no Apply button needed." Foreground="{StaticResource TextSecondary}" FontSize="10" TextWrapping="Wrap" Margin="0,0,0,6"/>
+                                    <Grid>
+                                        <TextBlock Text="Brightness" Foreground="{StaticResource TextSecondary}" FontSize="11" HorizontalAlignment="Left"/>
+                                        <TextBlock x:Name="EditorBrightnessValueText" Text="0" Foreground="{StaticResource TextSecondary}" FontSize="11" HorizontalAlignment="Right"/>
+                                    </Grid>
+                                    <Slider x:Name="BrightnessSlider" Minimum="-100" Maximum="100" Value="0" ValueChanged="Adjustment_ValueChanged" Margin="0,0,0,6"/>
+                                    <Grid>
+                                        <TextBlock Text="Contrast" Foreground="{StaticResource TextSecondary}" FontSize="11" HorizontalAlignment="Left"/>
+                                        <TextBlock x:Name="EditorContrastValueText" Text="0" Foreground="{StaticResource TextSecondary}" FontSize="11" HorizontalAlignment="Right"/>
+                                    </Grid>
+                                    <Slider x:Name="ContrastSlider" Minimum="-100" Maximum="100" Value="0" ValueChanged="Adjustment_ValueChanged" Margin="0,0,0,6"/>
+                                    <Grid>
+                                        <TextBlock Text="Sharpness" Foreground="{StaticResource TextSecondary}" FontSize="11" HorizontalAlignment="Left"/>
+                                        <TextBlock x:Name="EditorSharpnessValueText" Text="100" Foreground="{StaticResource TextSecondary}" FontSize="11" HorizontalAlignment="Right"/>
+                                    </Grid>
+                                    <Slider x:Name="SharpnessSlider" Minimum="0" Maximum="200" Value="100" ValueChanged="Adjustment_ValueChanged" Margin="0,0,0,8"/>
+                                    <Button Content="Reset Adjustments" Click="ResetAdjustments_Click" Style="{StaticResource ToolButton}" HorizontalAlignment="Stretch"/>
+
+                                    <TextBlock Text="LENS CALIBRATION" Style="{StaticResource SectionLabel}"/>
+                                    <Button Content="Undistort (Lens Profile)" Click="ApplyUndistort_Click" Style="{StaticResource ToolButton}" HorizontalAlignment="Stretch"/>
+                                </StackPanel>
+                            </ScrollViewer>
+
+                            <!-- Image canvas -->
+                            <Border Grid.Column="1" Background="{StaticResource TileBackground}" CornerRadius="6">
+                                <Grid x:Name="EditorImageHost" ClipToBounds="True">
+                                    <Image x:Name="EditorImage" Stretch="Uniform" SizeChanged="EditorImage_SizeChanged"/>
+                                    <Canvas x:Name="EditorSelectionCanvas" Background="Transparent" IsHitTestVisible="False"
+                                            MouseLeftButtonDown="SelectionCanvas_MouseDown"
+                                            MouseMove="SelectionCanvas_MouseMove"
+                                            MouseLeftButtonUp="SelectionCanvas_MouseUp">
+                                        <Rectangle x:Name="EditorSelectionRect" Stroke="#3D8BFF" StrokeThickness="2"
+                                                   StrokeDashArray="4,2" Visibility="Collapsed"/>
+                                    </Canvas>
+                                    <TextBlock Text="Open an image or grab an RTSP frame to get started"
+                                               x:Name="EditorPlaceholderText" Foreground="{StaticResource TextSecondary}"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="14"/>
+                                </Grid>
+                            </Border>
+
+                            <!-- Filter gallery: exclusive selection, auto-applies, non-destructive -->
+                            <Border Grid.Column="2" Background="{StaticResource PanelBackground}" CornerRadius="6" Margin="10,0,0,0">
+                                <DockPanel Margin="10">
+                                    <TextBlock DockPanel.Dock="Top" Text="FILTER" Style="{StaticResource SectionLabel}" Margin="0,0,0,6"/>
+                                    <TextBlock DockPanel.Dock="Top" Text="One at a time — click to preview instantly." Foreground="{StaticResource TextSecondary}" FontSize="10" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                        <ItemsControl x:Name="FilterGallery">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <WrapPanel/>
+                                                </ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Button Style="{StaticResource FilterTile}" Click="FilterTile_Click"/>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </ScrollViewer>
+                                </DockPanel>
+                            </Border>
+                        </Grid>
+                    </DockPanel>
+                </TabItem>
+
+                <!-- ============================ LENS CALIBRATION TAB ============================ -->
+                <TabItem Header="Lens Calibration" Style="{StaticResource DarkTab}">
+                <Grid Margin="10">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="300"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <ScrollViewer Grid.Column="0" Margin="0,0,10,0">
+                        <StackPanel>
+                            <TextBlock Text="CHESSBOARD SETTINGS" Style="{StaticResource SectionLabel}" Margin="0,0,0,4"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="8"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="Inner corners (cols)" Foreground="{StaticResource TextSecondary}" FontSize="11"/>
+                                    <TextBox x:Name="BoardColsBox" Text="9" Style="{StaticResource InputBox}"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="2">
+                                    <TextBlock Text="Inner corners (rows)" Foreground="{StaticResource TextSecondary}" FontSize="11"/>
+                                    <TextBox x:Name="BoardRowsBox" Text="6" Style="{StaticResource InputBox}"/>
+                                </StackPanel>
+                            </Grid>
+                            <TextBlock Text="Square size (mm)" Foreground="{StaticResource TextSecondary}" FontSize="11" Margin="0,8,0,0"/>
+                            <TextBox x:Name="SquareSizeBox" Text="25" Style="{StaticResource InputBox}"/>
+
+                            <TextBlock Text="CAPTURE VIEWS" Style="{StaticResource SectionLabel}"/>
+                            <Button Content="Add Image(s) From File…" Click="AddCalibImagesFromFile_Click" Style="{StaticResource ToolButton}" HorizontalAlignment="Stretch"/>
+                            <Button Content="Grab View from RTSP…" Click="GrabRtspCalib_Click" Style="{StaticResource ToolButton}" HorizontalAlignment="Stretch"/>
+                            <Button Content="Clear Accepted Views" Click="ClearCalibViews_Click" Style="{StaticResource ToolButton}" HorizontalAlignment="Stretch"/>
+
+                            <TextBlock x:Name="CalibViewsCountText" Text="0 views accepted" Foreground="{StaticResource TextSecondary}" FontSize="12" Margin="0,8,0,0"/>
+
+                            <TextBlock Text="CALIBRATE" Style="{StaticResource SectionLabel}"/>
+                            <Button Content="Run Calibration" Click="RunCalibration_Click" Style="{StaticResource ToolButton}" HorizontalAlignment="Stretch"/>
+                            <Button Content="Save Profile" Click="SaveCalibProfile_Click" Style="{StaticResource ToolButton}" HorizontalAlignment="Stretch"/>
+
+                            <TextBox x:Name="CalibResultText" Style="{StaticResource InputBox}" IsReadOnly="True"
+                                     TextWrapping="Wrap" AcceptsReturn="True" Height="220" Margin="0,10,0,0"
+                                     VerticalScrollBarVisibility="Auto"/>
+                        </StackPanel>
+                    </ScrollViewer>
+
+                    <Border Grid.Column="1" Background="{StaticResource TileBackground}" CornerRadius="6">
+                        <Image x:Name="CalibPreviewImage" Stretch="Uniform" Margin="10"/>
+                    </Border>
+                </Grid>
+            </TabItem>
+
+        </TabControl>
+        </DockPanel>
+    </Border>
+</Window>
