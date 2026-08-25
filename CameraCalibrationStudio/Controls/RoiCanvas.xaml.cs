@@ -48,7 +48,16 @@ namespace CameraCalibrationStudio.Controls
         public double CurrentZoomPercent => Scale.ScaleX * 100.0;
 
         private int _imageWidth, _imageHeight;
-        private bool _hasFittedOnce;
+
+        /// <summary>
+        /// True from image load until the user explicitly zooms/pans. While true, every viewport
+        /// size change (window resize, maximize/restore completing, tab switch reflow, DPI change)
+        /// re-fits the image. This is what keeps the image correctly scaled even when the actual
+        /// maximize happens on the OS side *after* the first layout pass — a single one-shot fit
+        /// could otherwise fit against a stale, too-small pre-maximize viewport size and never
+        /// correct itself, which showed up as the image looking wrong-sized/"cropped".
+        /// </summary>
+        private bool _autoFitMode;
         private CalibrationObjectBase? _pendingNewShape;
 
         // drag state
@@ -81,7 +90,7 @@ namespace CameraCalibrationStudio.Controls
         {
             _imageWidth = originalWidth;
             _imageHeight = originalHeight;
-            _hasFittedOnce = false;
+            _autoFitMode = true;
             TransformRoot.Width = originalWidth;
             TransformRoot.Height = originalHeight;
             BackgroundImage.Width = originalWidth;
@@ -118,10 +127,14 @@ namespace CameraCalibrationStudio.Controls
             double scale = Math.Min(Viewport.ActualWidth / _imageWidth, Viewport.ActualHeight / _imageHeight);
             scale = Math.Clamp(scale, 0.02, 8.0);
             SetZoom(scale, centerInViewport: true);
-            _hasFittedOnce = true;
+            _autoFitMode = true; // Fit re-engages auto-correction on future resizes
         }
 
-        public void SetZoomPercent(double percent) => SetZoom(percent / 100.0, centerInViewport: true);
+        public void SetZoomPercent(double percent)
+        {
+            _autoFitMode = false; // explicit zoom — stop auto-correcting on resize
+            SetZoom(percent / 100.0, centerInViewport: true);
+        }
 
         private void SetZoom(double scale, bool centerInViewport)
         {
@@ -142,6 +155,7 @@ namespace CameraCalibrationStudio.Controls
         private void Viewport_MouseWheel(object sender, MouseWheelEventArgs e)
         {
             if (_imageWidth <= 0) return;
+            _autoFitMode = false; // explicit zoom — stop auto-correcting on resize
             Point imagePoint = e.GetPosition(TransformRoot);
             Point viewportPoint = e.GetPosition(Viewport);
 
@@ -160,12 +174,13 @@ namespace CameraCalibrationStudio.Controls
 
         private void Viewport_SizeChanged(object sender, SizeChangedEventArgs e)
         {
-            // Normally, resizing the window keeps the current zoom (auto-fit is explicit via the
-            // Fit button / 'F' key). The one exception: if an image was loaded before the
-            // viewport had ever been laid out (ActualWidth/Height was still 0), FitToWindow()
-            // couldn't do anything at load time — fit now that real dimensions exist, instead of
-            // leaving the image stuck at 100% zoom anchored top-left (which looks like cropping).
-            if (!_hasFittedOnce && _imageWidth > 0 && Viewport.ActualWidth > 0 && Viewport.ActualHeight > 0)
+            // While in auto-fit mode (from image load until the user manually zooms/pans/clicks
+            // Fit again), keep re-fitting on every viewport size change. This covers not just the
+            // very first layout pass but also the window's maximize animation completing *after*
+            // that first pass — a one-shot fit could otherwise lock in against a stale, too-small
+            // pre-maximize size and never correct, which looked like the image being cropped or
+            // undersized.
+            if (_autoFitMode && _imageWidth > 0 && Viewport.ActualWidth > 0 && Viewport.ActualHeight > 0)
                 FitToWindow();
         }
 
@@ -304,6 +319,7 @@ namespace CameraCalibrationStudio.Controls
 
         private void StartPan(MouseButtonEventArgs e)
         {
+            _autoFitMode = false; // explicit pan — stop auto-correcting on resize
             _isPanning = true;
             _panMouseStart = e.GetPosition(Viewport);
             _panTranslateStartX = Translate.X;
