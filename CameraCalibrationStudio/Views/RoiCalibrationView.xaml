@@ -50,11 +50,11 @@
              and JSON panel always keep their full height. -->
         <Grid>
             <Grid.ColumnDefinitions>
-                <ColumnDefinition x:Name="LeftColumn" Width="240"/>
+                <ColumnDefinition x:Name="LeftColumn" Width="240" MinWidth="180" MaxWidth="480"/>
                 <ColumnDefinition Width="6"/>
-                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="*" MinWidth="240"/>
                 <ColumnDefinition Width="6"/>
-                <ColumnDefinition x:Name="JsonColumn" Width="360"/>
+                <ColumnDefinition x:Name="JsonColumn" Width="360" MinWidth="220" MaxWidth="640"/>
             </Grid.ColumnDefinitions>
 
             <!-- Left: draw tools + objects + adjustments + color + batch -->

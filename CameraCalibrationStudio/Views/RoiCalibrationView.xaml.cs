@@ -748,6 +748,7 @@ namespace CameraCalibrationStudio.Views
             if (_jsonCollapsed)
             {
                 _lastJsonColumnWidth = JsonColumn.Width.Value;
+                JsonColumn.MinWidth = 28;
                 JsonColumn.Width = new GridLength(28);
                 JsonPanel.Visibility = Visibility.Collapsed;
                 JsonCollapsedStrip.Visibility = Visibility.Visible;
@@ -755,6 +756,7 @@ namespace CameraCalibrationStudio.Views
             }
             else
             {
+                JsonColumn.MinWidth = 220;
                 JsonColumn.Width = new GridLength(_lastJsonColumnWidth);
                 JsonPanel.Visibility = Visibility.Visible;
                 JsonCollapsedStrip.Visibility = Visibility.Collapsed;
