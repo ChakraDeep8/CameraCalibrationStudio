@@ -90,7 +90,7 @@ namespace CameraCalibrationStudio.Controls
         {
             _imageWidth = originalWidth;
             _imageHeight = originalHeight;
-            _autoFitMode = true;
+            _autoFitMode = false; // opens at native resolution, not scaled to fit the window
             TransformRoot.Width = originalWidth;
             TransformRoot.Height = originalHeight;
             BackgroundImage.Width = originalWidth;
@@ -99,20 +99,13 @@ namespace CameraCalibrationStudio.Controls
             ShapesCanvas.Width = originalWidth;
             ShapesCanvas.Height = originalHeight;
 
-            // The viewport may not have been laid out yet (e.g. the very first image opened,
-            // before the window has completed its first layout pass) — Viewport.ActualWidth/
-            // Height would still be 0, silently making FitToWindow() a no-op and leaving the
-            // image at 100% zoom anchored top-left, so only its top-left corner is visible
-            // inside the clipped viewport. That looked like the image being "cropped" to a
-            // fixed size. Retry once layout has actually happened, in addition to trying now.
-            if (Viewport.ActualWidth > 0 && Viewport.ActualHeight > 0)
-            {
-                FitToWindow();
-            }
-            else
-            {
-                Dispatcher.BeginInvoke(new Action(FitToWindow), System.Windows.Threading.DispatcherPriority.Loaded);
-            }
+            // Opens at 100% (true pixel-for-pixel native resolution) rather than auto-scaled to
+            // fit the window — calibration coordinates are exact either way (zoom never affects
+            // them), but showing native resolution by default means what you see is exactly what
+            // the camera captured, with no visual scaling to second-guess. If the image is larger
+            // than the viewport it's simply not all visible at once — pan or click Fit to see it
+            // all. Centering only applies when the image is smaller than the viewport.
+            SetZoom(1.0, centerInViewport: true);
         }
 
         public void SetPreviewImage(BitmapSource bitmap) => BackgroundImage.Source = bitmap;
