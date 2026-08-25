@@ -62,7 +62,34 @@
                 <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                     <StackPanel Margin="10">
 
-                        <TextBlock Text="DRAW ROI" Style="{StaticResource SectionLabel}" Margin="0,0,0,6"/>
+                        <TextBlock Text="DRAW / CLASS" Style="{StaticResource SectionLabel}" Margin="0,0,0,6"/>
+
+                        <TextBlock Text="ACTIVE CLASS" Foreground="{StaticResource TextSecondary}" FontSize="10" Margin="0,0,0,3"/>
+                        <Button x:Name="ActiveClassButton" Click="ActiveClassButton_Click" Style="{StaticResource ToolButton}"
+                                HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Padding="8,7" Margin="0,0,0,4">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Ellipse x:Name="ActiveClassSwatch" Width="10" Height="10" Fill="{StaticResource TextSecondary}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                <TextBlock x:Name="ActiveClassText" Grid.Column="1" Text="No active class — pick one, or draw and choose after" TextWrapping="Wrap" FontSize="11.5"/>
+                            </Grid>
+                        </Button>
+
+                        <StackPanel x:Name="RecentClassesPanel" Orientation="Horizontal" Margin="0,0,0,6"/>
+
+                        <Grid Margin="0,0,0,8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <RadioButton x:Name="SingleDrawRadio" Grid.Column="0" Content="Single Draw" GroupName="DrawMode" IsChecked="True"
+                                         Style="{StaticResource ToolRadioButton}" Margin="0,0,3,0"/>
+                            <RadioButton x:Name="ContinuousDrawRadio" Grid.Column="1" Content="Continuous" GroupName="DrawMode"
+                                         Style="{StaticResource ToolRadioButton}" Margin="3,0,0,0"/>
+                        </Grid>
+
                         <StackPanel>
                             <RadioButton x:Name="ToolRectangle" Content="▭  Rectangle" GroupName="Tools" Style="{StaticResource ToolRadioButton}" Checked="Tool_Checked"/>
                             <RadioButton x:Name="ToolSquare" Content="□  Square" GroupName="Tools" Style="{StaticResource ToolRadioButton}" Checked="Tool_Checked"/>
@@ -73,34 +100,50 @@
                         <TextBlock x:Name="ToolHintText" Text="Click an existing region to select, move, resize or rename it."
                                    Foreground="{StaticResource TextSecondary}" FontSize="11" TextWrapping="Wrap" Margin="0,8,0,4"/>
 
+                        <Grid Margin="0,4,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Button Grid.Column="0" Content="+ New Class" Click="NewClass_Click" Style="{StaticResource ToolButton}" Margin="0,0,3,0"/>
+                            <Button Grid.Column="1" Content="Manage Classes" Click="ManageClasses_Click" Style="{StaticResource ToolButton}" Margin="3,0,0,0"/>
+                        </Grid>
+
                         <Expander x:Name="ObjectsExpander" Header="CALIBRATION OBJECTS" IsExpanded="True" Foreground="{StaticResource TextSecondary}" FontSize="11" FontWeight="SemiBold" Margin="0,14,0,0">
-                            <ListBox x:Name="ObjectList" Background="Transparent" BorderThickness="0" Margin="0,8,0,0"
-                                     ScrollViewer.VerticalScrollBarVisibility="Disabled"
-                                     ItemContainerStyle="{StaticResource ObjectListItem}"
-                                     SelectionChanged="ObjectList_SelectionChanged">
-                                <ListBox.ItemTemplate>
-                                    <DataTemplate>
-                                        <Grid>
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="Auto"/>
-                                                <ColumnDefinition Width="*"/>
-                                                <ColumnDefinition Width="Auto"/>
-                                            </Grid.ColumnDefinitions>
-                                            <CheckBox IsChecked="{Binding IsVisible, Mode=TwoWay}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                            <TextBlock Grid.Column="1" Text="{Binding Name}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" FontSize="12.5"
-                                                       Cursor="Hand" ToolTip="Double-click to rename" MouseLeftButtonDown="ObjectName_MouseLeftButtonDown"/>
-                                            <StackPanel Grid.Column="2" Orientation="Horizontal">
-                                                <TextBlock Text="✎" Foreground="{StaticResource TextSecondary}" Cursor="Hand" ToolTip="Rename"
-                                                           MouseLeftButtonDown="RenameObjectGlyph_MouseLeftButtonDown" Margin="6,0,0,0"/>
-                                                <TextBlock Text="⧉" Foreground="{StaticResource TextSecondary}" Cursor="Hand" ToolTip="Duplicate"
-                                                           MouseLeftButtonDown="DuplicateObjectGlyph_MouseLeftButtonDown" Margin="8,0,0,0"/>
-                                                <TextBlock Text="✕" Foreground="{StaticResource TextSecondary}" Cursor="Hand" ToolTip="Delete"
-                                                           MouseLeftButtonDown="DeleteObjectGlyph_MouseLeftButtonDown" Margin="8,0,2,0"/>
-                                            </StackPanel>
-                                        </Grid>
-                                    </DataTemplate>
-                                </ListBox.ItemTemplate>
-                            </ListBox>
+                            <StackPanel Margin="0,8,0,0">
+                                <ComboBox x:Name="ClassFilterCombo" Margin="0,0,0,6" SelectionChanged="ClassFilterCombo_SelectionChanged"/>
+                                <ListBox x:Name="ObjectList" Background="Transparent" BorderThickness="0"
+                                         ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                                         ItemContainerStyle="{StaticResource ObjectListItem}"
+                                         SelectionChanged="ObjectList_SelectionChanged">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <CheckBox IsChecked="{Binding IsVisible, Mode=TwoWay}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                                <Ellipse Grid.Column="1" Width="8" Height="8" Fill="{Binding SwatchBrush}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                                <TextBlock Grid.Column="2" Text="{Binding Name}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" FontSize="12.5"
+                                                           Cursor="Hand" ToolTip="Double-click to rename" MouseLeftButtonDown="ObjectName_MouseLeftButtonDown"/>
+                                                <StackPanel Grid.Column="3" Orientation="Horizontal">
+                                                    <TextBlock Text="▾" Foreground="{StaticResource TextSecondary}" Cursor="Hand" ToolTip="Change class"
+                                                               MouseLeftButtonDown="ChangeObjectClassGlyph_MouseLeftButtonDown" Margin="6,0,0,0"/>
+                                                    <TextBlock Text="✎" Foreground="{StaticResource TextSecondary}" Cursor="Hand" ToolTip="Rename"
+                                                               MouseLeftButtonDown="RenameObjectGlyph_MouseLeftButtonDown" Margin="6,0,0,0"/>
+                                                    <TextBlock Text="⧉" Foreground="{StaticResource TextSecondary}" Cursor="Hand" ToolTip="Duplicate"
+                                                               MouseLeftButtonDown="DuplicateObjectGlyph_MouseLeftButtonDown" Margin="8,0,0,0"/>
+                                                    <TextBlock Text="✕" Foreground="{StaticResource TextSecondary}" Cursor="Hand" ToolTip="Delete"
+                                                               MouseLeftButtonDown="DeleteObjectGlyph_MouseLeftButtonDown" Margin="8,0,2,0"/>
+                                                </StackPanel>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                            </StackPanel>
                         </Expander>
 
                         <Expander x:Name="AdjustmentsExpander" Header="ADJUSTMENTS" IsExpanded="True" Foreground="{StaticResource TextSecondary}" FontSize="11" FontWeight="SemiBold" Margin="0,14,0,0">

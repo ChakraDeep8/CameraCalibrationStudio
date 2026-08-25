@@ -33,6 +33,9 @@ namespace CameraCalibrationStudio.Controls
         public Models.Roi.RoiDocument? Document;
         public Services.RoiHistory? History;
 
+        /// <summary>Resolves an object's class color for the canvas outline/label/handles, if it has one assigned.</summary>
+        public Func<CalibrationObjectBase, Color?>? ClassColorResolver { get; set; }
+
         public event Action? Changed;
         public event Action<CalibrationObjectBase?>? SelectionChanged;
         public event Action<CalibrationObjectBase>? RequestNaming;
@@ -606,9 +609,10 @@ namespace CameraCalibrationStudio.Controls
 
         private void DrawObject(CalibrationObjectBase obj, bool selected)
         {
-            var color = selected ? AccentColor : IdleColor;
+            var classColor = ClassColorResolver?.Invoke(obj);
+            var color = selected ? AccentColor : (classColor ?? IdleColor);
             var brush = new SolidColorBrush(color);
-            double thickness = ScreenSize(selected ? 2.5 : 1.5);
+            double thickness = ScreenSize(selected ? 3 : 2);
 
             Shape? shape = obj switch
             {

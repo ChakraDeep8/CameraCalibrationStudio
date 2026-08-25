@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Windows;
+using System.Windows.Media;
 
 namespace CameraCalibrationStudio.Models.Roi
 {
@@ -25,8 +26,16 @@ namespace CameraCalibrationStudio.Models.Roi
         private string _name = "";
         public string Name { get => _name; set { _name = value; Raise(); } }
 
+        /// <summary>Reusable class this object is labeled with, if any (see CalibrationClass). Null for a freely-typed one-off name.</summary>
+        private string? _classId;
+        public string? ClassId { get => _classId; set { _classId = value; Raise(); } }
+
         private bool _isVisible = true;
         public bool IsVisible { get => _isVisible; set { _isVisible = value; Raise(); } }
+
+        /// <summary>Display-only, kept in sync by the host from the class library — not persisted (JSON export builds its own fields).</summary>
+        private Brush _swatchBrush = Brushes.Gray;
+        public Brush SwatchBrush { get => _swatchBrush; set { _swatchBrush = value; Raise(); } }
 
         public abstract ShapeKind Kind { get; }
 
@@ -60,7 +69,7 @@ namespace CameraCalibrationStudio.Models.Roi
         public override Rect GetBounds() => new(Math.Min(X1, X2), Math.Min(Y1, Y2), Math.Abs(X2 - X1), Math.Abs(Y2 - Y1));
 
         public override CalibrationObjectBase Clone() =>
-            new RectangleObject { Name = Name, IsVisible = IsVisible, X1 = X1, Y1 = Y1, X2 = X2, Y2 = Y2, IsSquare = IsSquare };
+            new RectangleObject { Name = Name, ClassId = ClassId, IsVisible = IsVisible, X1 = X1, Y1 = Y1, X2 = X2, Y2 = Y2, IsSquare = IsSquare };
     }
 
     public class PolygonObject : CalibrationObjectBase
@@ -83,7 +92,7 @@ namespace CameraCalibrationStudio.Models.Roi
         }
 
         public override CalibrationObjectBase Clone() =>
-            new PolygonObject { Name = Name, IsVisible = IsVisible, Points = Points.Select(p => p).ToList() };
+            new PolygonObject { Name = Name, ClassId = ClassId, IsVisible = IsVisible, Points = Points.Select(p => p).ToList() };
     }
 
     public class LineObject : CalibrationObjectBase
@@ -105,6 +114,6 @@ namespace CameraCalibrationStudio.Models.Roi
         }
 
         public override CalibrationObjectBase Clone() =>
-            new LineObject { Name = Name, IsVisible = IsVisible, Start = Start, End = End };
+            new LineObject { Name = Name, ClassId = ClassId, IsVisible = IsVisible, Start = Start, End = End };
     }
 }

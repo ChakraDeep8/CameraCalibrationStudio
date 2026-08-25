@@ -23,7 +23,7 @@ namespace CameraCalibrationStudio.Services
 
         // ---------------- Native (editor) schema ----------------
 
-        public static JsonObject BuildNativeJson(RoiDocument doc)
+        public static JsonObject BuildNativeJson(RoiDocument doc, Func<string?, string?>? classNameResolver = null)
         {
             var root = new JsonObject
             {
@@ -50,11 +50,11 @@ namespace CameraCalibrationStudio.Services
                 };
             }
 
-            root["objects"] = BuildObjectsArray(doc.Objects);
+            root["objects"] = BuildObjectsArray(doc.Objects, classNameResolver);
             return root;
         }
 
-        private static JsonArray BuildObjectsArray(IEnumerable<CalibrationObjectBase> objects)
+        private static JsonArray BuildObjectsArray(IEnumerable<CalibrationObjectBase> objects, Func<string?, string?>? classNameResolver)
         {
             var arr = new JsonArray();
             foreach (var obj in objects)
@@ -86,18 +86,24 @@ namespace CameraCalibrationStudio.Services
                     },
                     _ => new JsonObject()
                 };
+
+                var className = classNameResolver?.Invoke(obj.ClassId);
+                if (!string.IsNullOrEmpty(className)) node["class"] = className;
+
                 arr.Add(node);
             }
             return arr;
         }
 
-        public static string ToPrettyString(RoiDocument doc) => BuildNativeJson(doc).ToJsonString(PrettyOptions);
+        public static string ToPrettyString(RoiDocument doc, Func<string?, string?>? classNameResolver = null) =>
+            BuildNativeJson(doc, classNameResolver).ToJsonString(PrettyOptions);
 
-        public static void SaveNative(RoiDocument doc, string path) =>
-            File.WriteAllText(path, ToPrettyString(doc));
+        public static void SaveNative(RoiDocument doc, string path, Func<string?, string?>? classNameResolver = null) =>
+            File.WriteAllText(path, ToPrettyString(doc, classNameResolver));
 
-        /// <summary>Loads a native-schema calibration file into an existing document (replacing its objects).</summary>
-        public static void LoadNativeInto(RoiDocument doc, string path)
+        /// <summary>Loads a native-schema calibration file into an existing document (replacing its objects).
+        /// classIdResolver maps a saved class name back to a class id in the current library, if one matches.</summary>
+        public static void LoadNativeInto(RoiDocument doc, string path, Func<string, string?>? classIdResolver = null)
         {
             JsonNode root;
             try
@@ -141,6 +147,7 @@ namespace CameraCalibrationStudio.Services
                 if (node == null) continue;
                 var type = (string?)node["type"] ?? "";
                 var name = (string?)node["name"] ?? "Unnamed";
+                var className = (string?)node["class"];
 
                 CalibrationObjectBase? shape = type switch
                 {
@@ -169,7 +176,12 @@ namespace CameraCalibrationStudio.Services
                     _ => null
                 };
 
-                if (shape != null) doc.Objects.Add(shape);
+                if (shape != null)
+                {
+                    if (!string.IsNullOrEmpty(className))
+                        shape.ClassId = classIdResolver?.Invoke(className);
+                    doc.Objects.Add(shape);
+                }
             }
         }
 

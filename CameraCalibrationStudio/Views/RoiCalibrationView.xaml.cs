@@ -1,16 +1,22 @@
 using System;
+using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
 using System.Windows.Input;
+using System.Windows.Media;
+using System.Windows.Shapes;
 using CameraCalibrationStudio.Controls;
 using CameraCalibrationStudio.Models;
 using CameraCalibrationStudio.Models.Roi;
 using CameraCalibrationStudio.Services;
 using Microsoft.Win32;
 using OpenCvSharp;
+using Path = System.IO.Path;
 using Point = System.Windows.Point;
 using Window = System.Windows.Window;
 
@@ -31,12 +37,16 @@ namespace CameraCalibrationStudio.Views
         private readonly RoiDocument _document = new();
         private readonly RoiHistory _history = new();
         private readonly PreviewProcessor _preview = new();
+        private readonly ObservableCollection<CalibrationClass> _classLibrary = ClassLibraryStore.Load();
         private Mat? _originalMat;
         private bool _dirty;
         private bool _syncingSelection;
         private Point? _lastHover;
         private double _lastJsonColumnWidth = 360;
         private bool _jsonCollapsed;
+        private CalibrationClass? _activeClass;
+        private ICollectionView? _objectListView;
+        private string? _classFilterId; // null = "All Classes"
 
         public bool IsDirty => _dirty;
         public string? CurrentImagePath => _document.ImagePath;
@@ -48,16 +58,196 @@ namespace CameraCalibrationStudio.Views
 
             Canvas.Document = _document;
             Canvas.History = _history;
+            Canvas.ClassColorResolver = GetClassColor;
             Canvas.Changed += OnCanvasChanged;
             Canvas.SelectionChanged += OnCanvasSelectionChanged;
             Canvas.RequestNaming += OnRequestNaming;
             Canvas.HoverPositionChanged += p => { _lastHover = p; UpdateStatusBar(); };
             Canvas.ZoomChanged += _ => UpdateStatusBar();
 
-            ObjectList.ItemsSource = _document.Objects;
+            _objectListView = CollectionViewSource.GetDefaultView(_document.Objects);
+            _objectListView.Filter = o => _classFilterId == null || (o is CalibrationObjectBase obj && obj.ClassId == _classFilterId);
+            ObjectList.ItemsSource = _objectListView;
 
             UpdateToolHint();
+            UpdateActiveClassDisplay();
+            RefreshRecentClassChips();
+            RefreshClassFilterCombo();
             UpdateStatusBar();
+        }
+
+        // =====================================================================
+        // Class library
+        // =====================================================================
+
+        private Color? GetClassColor(CalibrationObjectBase obj)
+        {
+            if (obj.ClassId == null) return null;
+            var cls = _classLibrary.FirstOrDefault(c => c.Id == obj.ClassId);
+            if (cls == null) return null;
+            try { return (Color)ColorConverter.ConvertFromString(cls.ColorHex); }
+            catch { return null; }
+        }
+
+        /// <summary>Keeps each object's list-item color swatch (a plain bound property) in sync with the class library.</summary>
+        private void UpdateObjectSwatches()
+        {
+            foreach (var obj in _document.Objects)
+            {
+                var color = GetClassColor(obj);
+                obj.SwatchBrush = color.HasValue ? new SolidColorBrush(color.Value) : Brushes.Gray;
+            }
+        }
+
+        private void SetActiveClass(CalibrationClass? cls)
+        {
+            _activeClass = cls;
+            UpdateActiveClassDisplay();
+
+            if (cls?.PreferredShape != null)
+            {
+                var radio = cls.PreferredShape switch
+                {
+                    ShapeKind.Rectangle => ToolRectangle,
+                    ShapeKind.Square => ToolSquare,
+                    ShapeKind.Polygon => ToolPolygon,
+                    ShapeKind.Line => ToolLine,
+                    _ => null
+                };
+                if (radio != null) radio.IsChecked = true;
+            }
+        }
+
+        private void UpdateActiveClassDisplay()
+        {
+            if (_activeClass == null)
+            {
+                ActiveClassText.Text = "No active class — pick one, or draw and choose after";
+                ActiveClassSwatch.Fill = (Brush)FindResource("TextSecondary");
+            }
+            else
+            {
+                ActiveClassText.Text = _activeClass.Name + (_activeClass.PreferredShape != null ? $"  ·  {_activeClass.PreferredShape}" : "");
+                ActiveClassSwatch.Fill = _activeClass.SwatchBrush;
+            }
+        }
+
+        private void RefreshRecentClassChips()
+        {
+            RecentClassesPanel.Children.Clear();
+            var recent = _classLibrary
+                .Where(c => c.LastUsedUtc != null)
+                .OrderByDescending(c => c.LastUsedUtc)
+                .Take(4);
+
+            foreach (var c in recent)
+            {
+                var chip = new Border
+                {
+                    Background = (Brush)FindResource("TileBackground"),
+                    CornerRadius = new CornerRadius(10),
+                    Padding = new Thickness(8, 3, 8, 3),
+                    Margin = new Thickness(0, 0, 4, 0),
+                    Cursor = System.Windows.Input.Cursors.Hand,
+                    ToolTip = c.Name
+                };
+                var stack = new StackPanel { Orientation = Orientation.Horizontal };
+                stack.Children.Add(new Ellipse { Width = 7, Height = 7, Fill = c.SwatchBrush, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 5, 0) });
+                stack.Children.Add(new TextBlock { Text = Truncate(c.Name, 14), FontSize = 10.5, Foreground = (Brush)FindResource("TextPrimary") });
+                chip.Child = stack;
+                chip.MouseLeftButtonDown += (_, _) => SetActiveClass(c);
+                RecentClassesPanel.Children.Add(chip);
+            }
+        }
+
+        private static string Truncate(string s, int max) => s.Length <= max ? s : s[..max] + "…";
+
+        private void RefreshClassFilterCombo()
+        {
+            var current = _classFilterId;
+            ClassFilterCombo.Items.Clear();
+            ClassFilterCombo.Items.Add(new ComboBoxItem { Content = "All Classes", Tag = null });
+            foreach (var c in _classLibrary.OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase))
+                ClassFilterCombo.Items.Add(new ComboBoxItem { Content = c.Name, Tag = c.Id });
+
+            ClassFilterCombo.SelectedIndex = 0;
+            foreach (ComboBoxItem item in ClassFilterCombo.Items)
+            {
+                if ((string?)item.Tag == current) { ClassFilterCombo.SelectedItem = item; break; }
+            }
+        }
+
+        private void ClassFilterCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            _classFilterId = (ClassFilterCombo.SelectedItem as ComboBoxItem)?.Tag as string;
+            _objectListView?.Refresh();
+        }
+
+        private void ActiveClassButton_Click(object sender, RoutedEventArgs e)
+        {
+            var dlg = new ClassPickerDialog(_classLibrary, "Set Active Class") { Owner = Window.GetWindow(this) };
+            var ok = dlg.ShowDialog();
+            ClassLibraryStore.Save(_classLibrary); // persists any class created inline, even if the dialog result is used below
+            RefreshRecentClassChips();
+            RefreshClassFilterCombo();
+
+            if (ok != true) return;
+            if (dlg.Outcome == ClassPickerOutcome.Selected) SetActiveClass(dlg.SelectedClass);
+            else if (dlg.Outcome == ClassPickerOutcome.Custom) SetActiveClass(null);
+        }
+
+        private void NewClass_Click(object sender, RoutedEventArgs e)
+        {
+            var dlg = new NameShapeDialog("New class name", "", _classLibrary.Select(c => c.Name).ToList()) { Owner = Window.GetWindow(this) };
+            if (dlg.ShowDialog() != true) return;
+
+            var newClass = new CalibrationClass { Name = dlg.ResultName, ColorHex = ClassColorPalette.NextColor(_classLibrary.Count) };
+            _classLibrary.Add(newClass);
+            ClassLibraryStore.Save(_classLibrary);
+            RefreshClassFilterCombo();
+            SetActiveClass(newClass);
+        }
+
+        private void ManageClasses_Click(object sender, RoutedEventArgs e)
+        {
+            var dlg = new ManageClassesDialog(_classLibrary, _document.Objects) { Owner = Window.GetWindow(this) };
+            dlg.ShowDialog();
+            if (dlg.LibraryChanged)
+            {
+                UpdateObjectSwatches();
+                RefreshRecentChipsAndFilterAndCanvas();
+            }
+        }
+
+        private void RefreshRecentChipsAndFilterAndCanvas()
+        {
+            RefreshRecentClassChips();
+            RefreshClassFilterCombo();
+            UpdateActiveClassDisplay();
+            Canvas.RedrawAll();
+            RefreshAll();
+        }
+
+        private void ChangeObjectClassGlyph_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            if (sender is not FrameworkElement fe || fe.DataContext is not CalibrationObjectBase obj) return;
+
+            var dlg = new ClassPickerDialog(_classLibrary, "Change Class") { Owner = Window.GetWindow(this) };
+            var ok = dlg.ShowDialog();
+            ClassLibraryStore.Save(_classLibrary);
+            RefreshRecentClassChips();
+            RefreshClassFilterCombo();
+            if (ok != true || dlg.Outcome != ClassPickerOutcome.Selected || dlg.SelectedClass == null) return;
+
+            _history.Snapshot(_document.Objects);
+            obj.ClassId = dlg.SelectedClass.Id;
+            if (string.IsNullOrWhiteSpace(obj.Name) || _classLibrary.Any(c => c.Name == obj.Name))
+                obj.Name = dlg.SelectedClass.Name;
+            UpdateObjectSwatches();
+            Canvas.RedrawAll();
+            _dirty = true;
+            RefreshAll();
+            e.Handled = true;
         }
 
         // =====================================================================
@@ -276,21 +466,85 @@ namespace CameraCalibrationStudio.Views
 
         private void OnRequestNaming(CalibrationObjectBase pending)
         {
-            var dlg = new NameShapeDialog("Name this region", "", _document.Objects.Select(o => o.Name).ToList())
+            // Workflow B (class-first): an active class is already selected, so assign it
+            // immediately with no popup at all — this is the fast, repeated-annotation path.
+            if (_activeClass != null)
             {
-                Owner = Window.GetWindow(this)
-            };
-            if (dlg.ShowDialog() == true)
-            {
-                pending.Name = dlg.ResultName;
+                AssignClassToPending(pending, _activeClass);
                 Canvas.CommitPendingShape();
                 _dirty = true;
+                FinishShapeCreation();
+                return;
             }
-            else
+
+            // Workflow A (tool-first): no active class yet — offer the fast picker, with a
+            // fallback to a plain free-typed name for one-off regions.
+            var picker = new ClassPickerDialog(_classLibrary) { Owner = Window.GetWindow(this) };
+            var pickerResult = picker.ShowDialog();
+            ClassLibraryStore.Save(_classLibrary);
+            RefreshRecentClassChips();
+            RefreshClassFilterCombo();
+
+            if (pickerResult == true && picker.Outcome == ClassPickerOutcome.Selected && picker.SelectedClass != null)
             {
-                Canvas.DiscardPendingShape();
+                AssignClassToPending(pending, picker.SelectedClass);
+                Canvas.CommitPendingShape();
+                _dirty = true;
+                FinishShapeCreation();
+                return;
             }
+
+            if (pickerResult == true && picker.Outcome == ClassPickerOutcome.Custom)
+            {
+                var dlg = new NameShapeDialog("Name this region", "", _document.Objects.Select(o => o.Name).ToList())
+                {
+                    Owner = Window.GetWindow(this)
+                };
+                if (dlg.ShowDialog() == true)
+                {
+                    pending.Name = dlg.ResultName;
+                    Canvas.CommitPendingShape();
+                    _dirty = true;
+                    FinishShapeCreation();
+                    return;
+                }
+            }
+
+            Canvas.DiscardPendingShape();
             ResetToolToSelect();
+            RefreshAll();
+        }
+
+        /// <summary>Sets the object's class + a sensible instance name (auto-numbered if the class is already used).</summary>
+        private void AssignClassToPending(CalibrationObjectBase pending, CalibrationClass cls)
+        {
+            pending.ClassId = cls.Id;
+            cls.LastUsedUtc = DateTime.UtcNow;
+
+            var existingCount = _document.Objects.Count(o => o.ClassId == cls.Id);
+            pending.Name = existingCount == 0 ? cls.Name : NextInstanceName(cls.Name);
+        }
+
+        /// <summary>Suggests "CLASS_02", "CLASS_03", … for repeated use of the same class; the technician can still rename freely.</summary>
+        private string NextInstanceName(string className)
+        {
+            int n = 2;
+            while (_document.Objects.Any(o => string.Equals(o.Name, $"{className}_{n:D2}", StringComparison.OrdinalIgnoreCase)))
+                n++;
+            return $"{className}_{n:D2}";
+        }
+
+        /// <summary>Common tail after a shape is committed with a class/name: refresh everything, then
+        /// respect Single Draw vs Continuous Draw mode for whether the tool stays active.</summary>
+        private void FinishShapeCreation()
+        {
+            UpdateObjectSwatches();
+            RefreshRecentClassChips();
+            RefreshClassFilterCombo();
+
+            if (ContinuousDrawRadio.IsChecked != true)
+                ResetToolToSelect();
+
             RefreshAll();
         }
 
@@ -367,6 +621,7 @@ namespace CameraCalibrationStudio.Views
 
             _history.Snapshot(_document.Objects);
             _document.Objects.Add(clone);
+            UpdateObjectSwatches();
             Canvas.RedrawAll();
             Canvas.Select(clone);
             _dirty = true;
@@ -407,6 +662,7 @@ namespace CameraCalibrationStudio.Views
             var snapshot = _history.Undo(_document.Objects);
             if (snapshot == null) return;
             Canvas.ReplaceObjects(snapshot);
+            UpdateObjectSwatches();
             _dirty = true;
             RefreshAll();
         }
@@ -416,6 +672,7 @@ namespace CameraCalibrationStudio.Views
             var snapshot = _history.Redo(_document.Objects);
             if (snapshot == null) return;
             Canvas.ReplaceObjects(snapshot);
+            UpdateObjectSwatches();
             _dirty = true;
             RefreshAll();
         }
@@ -489,7 +746,7 @@ namespace CameraCalibrationStudio.Views
 
             try
             {
-                RoiJsonService.SaveNative(_document, dlg.FileName);
+                RoiJsonService.SaveNative(_document, dlg.FileName, ResolveClassName);
                 _dirty = false;
                 RefreshAll();
                 return true;
@@ -516,7 +773,7 @@ namespace CameraCalibrationStudio.Views
 
             try
             {
-                RoiJsonService.LoadNativeInto(_document, dlg.FileName);
+                RoiJsonService.LoadNativeInto(_document, dlg.FileName, ResolveClassId);
                 _history.Clear();
                 Canvas.ReplaceObjects(_document.Objects.ToList());
                 BrightnessSlider.Value = _document.Adjustments.Brightness;
@@ -527,6 +784,8 @@ namespace CameraCalibrationStudio.Views
                 ExposureSlider.Value = _document.Adjustments.Exposure;
                 AutoWhiteBalanceCheck.IsChecked = _document.Adjustments.AutoWhiteBalance;
                 RenderPreview();
+                UpdateObjectSwatches();
+                RefreshClassFilterCombo();
                 _dirty = false;
                 RefreshAll();
             }
@@ -567,6 +826,12 @@ namespace CameraCalibrationStudio.Views
                     "Export Production Zones", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
+
+        private string? ResolveClassName(string? classId) =>
+            classId == null ? null : _classLibrary.FirstOrDefault(c => c.Id == classId)?.Name;
+
+        private string? ResolveClassId(string className) =>
+            _classLibrary.FirstOrDefault(c => string.Equals(c.Name, className, StringComparison.OrdinalIgnoreCase))?.Id;
 
         private void Meta_TextChanged(object sender, TextChangedEventArgs e)
         {
@@ -650,7 +915,7 @@ namespace CameraCalibrationStudio.Views
             // default IsChecked="True") firing their changed-event during InitializeComponent,
             // before JsonText further down the tree exists yet.
             if (JsonText == null) return;
-            JsonText.Text = _document.HasImage ? RoiJsonService.ToPrettyString(_document) : "{\n}";
+            JsonText.Text = _document.HasImage ? RoiJsonService.ToPrettyString(_document, ResolveClassName) : "{\n}";
             UpdateStatusBar();
         }
 

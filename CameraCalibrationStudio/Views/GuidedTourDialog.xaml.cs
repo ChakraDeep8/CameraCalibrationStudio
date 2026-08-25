@@ -22,9 +22,10 @@ namespace CameraCalibrationStudio.Views
             new("Draw directly on the image",
                 "Click and drag (or click point-by-point for polygons) right on top of the image.\n\n" +
                 "Coordinates are automatically stored using the original image resolution — you never need to type a number."),
-            new("Name each region",
-                "After drawing a shape, you'll be asked to give it a meaningful name.\n\n" +
-                "Example: CUSTOMER_ZONE_ROI, ENTRY_LINE, COUNTER_01."),
+            new("Assign a Class",
+                "Classes are reusable names for your calibration regions.\n\n" +
+                "Create names like CUSTOMER_ZONE_ROI, STAFF_ZONE_ROI, ENTRY_LINE once, then just pick them from the list after drawing — " +
+                "or set an Active Class first so new shapes are labeled automatically. No more retyping the same name."),
             new("Your JSON is generated automatically",
                 "The panel on the right always shows the current calibration JSON — it updates the moment you draw, move, resize, rename or delete a region.\n\n" +
                 "When you're done, click Save Calibration. You're ready to start."),

@@ -4,3 +4,4 @@ publish/
 *.user
 .vs/
 logo_source.png
+*.zip
