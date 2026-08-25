@@ -76,7 +76,7 @@ namespace CameraCalibrationStudio.Services
             return current;
         }
 
-        /// <summary>The small, exclusive style-filter set used by Image Editor's filter list.</summary>
+        /// <summary>The full, exclusive style-filter set — shared by Image Editor and ROI Calibration's filter gallery.</summary>
         public static readonly IReadOnlyDictionary<string, Func<Mat, Mat>> NamedFilters = new Dictionary<string, Func<Mat, Mat>>
         {
             ["Grayscale"] = Grayscale,
@@ -84,6 +84,18 @@ namespace CameraCalibrationStudio.Services
             ["Blur"] = m => GaussianBlur(m),
             ["Denoise"] = Denoise,
             ["Edges"] = m => EdgeDetect(m),
+            ["Black && White"] = m => BlackAndWhite(m),
+            ["Sepia"] = Sepia,
+            ["Vintage"] = Vintage,
+            ["Warm"] = WarmTone,
+            ["Cool"] = CoolTone,
+            ["Vignette"] = Vignette,
+            ["Posterize"] = m => Posterize(m),
+            ["Solarize"] = m => Solarize(m),
+            ["Emboss"] = Emboss,
+            ["Pencil Sketch"] = PencilSketch,
+            ["Cartoon"] = Cartoon,
+            ["Sharpen"] = Sharpen,
         };
 
         public static Mat RotateClockwise90(Mat src)

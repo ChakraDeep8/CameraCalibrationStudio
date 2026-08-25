@@ -46,7 +46,8 @@ namespace CameraCalibrationStudio.Services
                     ["temperature"] = Math.Round(doc.Adjustments.Temperature, 2),
                     ["saturation"] = Math.Round(doc.Adjustments.Saturation, 2),
                     ["exposure"] = Math.Round(doc.Adjustments.Exposure, 2),
-                    ["autoWhiteBalance"] = doc.Adjustments.AutoWhiteBalance
+                    ["autoWhiteBalance"] = doc.Adjustments.AutoWhiteBalance,
+                    ["filter"] = string.IsNullOrEmpty(doc.Adjustments.FilterName) ? null : doc.Adjustments.FilterName
                 };
             }
 
@@ -137,6 +138,7 @@ namespace CameraCalibrationStudio.Services
                 doc.Adjustments.Saturation = (double?)adj["saturation"] ?? 0;
                 doc.Adjustments.Exposure = (double?)adj["exposure"] ?? 0;
                 doc.Adjustments.AutoWhiteBalance = (bool?)adj["autoWhiteBalance"] ?? false;
+                doc.Adjustments.FilterName = (string?)adj["filter"] ?? "";
             }
 
             var objectsNode = root["objects"] as JsonArray;

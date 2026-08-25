@@ -16,6 +16,7 @@ using CameraCalibrationStudio.Models.Roi;
 using CameraCalibrationStudio.Services;
 using Microsoft.Win32;
 using OpenCvSharp;
+using OpenCvSharp.WpfExtensions;
 using Path = System.IO.Path;
 using Point = System.Windows.Point;
 using Window = System.Windows.Window;
@@ -68,6 +69,7 @@ namespace CameraCalibrationStudio.Views
             _objectListView = CollectionViewSource.GetDefaultView(_document.Objects);
             _objectListView.Filter = o => _classFilterId == null || (o is CalibrationObjectBase obj && obj.ClassId == _classFilterId);
             ObjectList.ItemsSource = _objectListView;
+            FilterGallery.ItemsSource = _filters;
 
             UpdateToolHint();
             UpdateActiveClassDisplay();
@@ -324,7 +326,9 @@ namespace CameraCalibrationStudio.Views
             _document.Objects.Clear();
             _history.Clear();
             _preview.SetSource(mat);
+            _selectedFilterName = "";
             ResetAdjustmentControls();
+            UpdateFilterThumbnails();
 
             var initialBitmap = _preview.Render(CurrentSettings());
             Canvas.LoadImage(initialBitmap, mat.Width, mat.Height);
@@ -347,8 +351,58 @@ namespace CameraCalibrationStudio.Views
             Temperature = TemperatureSlider.Value,
             Saturation = SaturationSlider.Value,
             Exposure = ExposureSlider.Value,
-            AutoWhiteBalance = AutoWhiteBalanceCheck.IsChecked == true
+            AutoWhiteBalance = AutoWhiteBalanceCheck.IsChecked == true,
+            FilterName = _selectedFilterName
         };
+
+        // ---- Filter gallery: same shared ImageOpsService.NamedFilters set as Image Editor,
+        // applied on top of brightness/contrast/sharpness/color — preview only. ----
+
+        private string _selectedFilterName = "";
+
+        private readonly ObservableCollection<FilterOption> _filters = BuildFilterOptions();
+
+        private static ObservableCollection<FilterOption> BuildFilterOptions()
+        {
+            var list = new ObservableCollection<FilterOption> { new("None", src => src.Clone()) };
+            foreach (var kv in ImageOpsService.NamedFilters)
+                list.Add(new FilterOption(kv.Key, kv.Value));
+            return list;
+        }
+
+        private void UpdateFilterThumbnails()
+        {
+            var baseMat = _preview.PreviewBase;
+            if (baseMat == null)
+            {
+                foreach (var f in _filters) f.Thumbnail = null;
+                return;
+            }
+
+            int longest = Math.Max(baseMat.Width, baseMat.Height);
+            int tw = Math.Max(1, (int)(120.0 * baseMat.Width / longest));
+            int th = Math.Max(1, (int)(120.0 * baseMat.Height / longest));
+            using var thumbBase = ImageOpsService.Resize(baseMat, tw, th);
+
+            foreach (var f in _filters)
+            {
+                try
+                {
+                    using var applied = f.Apply(thumbBase);
+                    var bmp = applied.ToBitmapSource();
+                    bmp.Freeze();
+                    f.Thumbnail = bmp;
+                }
+                catch { f.Thumbnail = null; }
+            }
+        }
+
+        private void FilterTile_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not Button { DataContext: FilterOption filter } || !_document.HasImage) return;
+            _selectedFilterName = filter.Name == "None" ? "" : filter.Name;
+            RenderPreview();
+        }
 
         private void Adjustment_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
@@ -783,6 +837,8 @@ namespace CameraCalibrationStudio.Views
                 SaturationSlider.Value = _document.Adjustments.Saturation;
                 ExposureSlider.Value = _document.Adjustments.Exposure;
                 AutoWhiteBalanceCheck.IsChecked = _document.Adjustments.AutoWhiteBalance;
+                _selectedFilterName = _document.Adjustments.FilterName;
+                UpdateFilterThumbnails();
                 RenderPreview();
                 UpdateObjectSwatches();
                 RefreshClassFilterCombo();
