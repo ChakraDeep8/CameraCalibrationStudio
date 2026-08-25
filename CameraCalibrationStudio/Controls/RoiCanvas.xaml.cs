@@ -239,7 +239,20 @@ namespace CameraCalibrationStudio.Controls
         private void Viewport_MouseRightButtonDown(object sender, MouseButtonEventArgs e)
         {
             if (Tool == ToolMode.Polygon && _polygonPoints.Count >= 3)
+            {
                 FinishPolygon();
+                return;
+            }
+
+            // Right-click while a shape is following the cursor (move or handle-resize drag)
+            // fixes it in place immediately, without needing to release the left button.
+            if (_isMovingShape || _isDraggingHandle)
+            {
+                _isMovingShape = false;
+                _isDraggingHandle = false;
+                Viewport.ReleaseMouseCapture();
+                e.Handled = true;
+            }
         }
 
         private void Viewport_MouseMove(object sender, MouseEventArgs e)

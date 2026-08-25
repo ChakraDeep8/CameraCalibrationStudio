@@ -25,6 +25,13 @@ namespace CameraCalibrationStudio.Views
         public ClassPickerOutcome Outcome { get; private set; } = ClassPickerOutcome.Cancelled;
         public CalibrationClass? SelectedClass { get; private set; }
 
+        // WPF can fire a spurious Deactivated on this borderless popup in the same tick it opens —
+        // e.g. the mouse-up that completed the click which opened it still bubbling to the owner's
+        // custom WindowChrome. Without a guard that self-closes the dialog before the user ever
+        // sees it, which is exactly what looked like "the class picker doesn't open". Only treat a
+        // Deactivated as real once this window has actually been Activated at least once.
+        private bool _hasActivated;
+
         public ClassPickerDialog(ObservableCollection<CalibrationClass> library, string title = "Assign Calibration Class")
         {
             InitializeComponent();
@@ -32,6 +39,7 @@ namespace CameraCalibrationStudio.Views
             TitleText.Text = title;
             ClassList.ItemsSource = _view;
             RefreshView("");
+            Activated += (_, _) => _hasActivated = true;
             Loaded += (_, _) => SearchBox.Focus();
         }
 
@@ -157,8 +165,9 @@ namespace CameraCalibrationStudio.Views
         private void Window_Deactivated(object sender, EventArgs e)
         {
             // Losing focus (e.g. clicking elsewhere) closes the popup like a real popup would,
-            // rather than leaving an orphaned borderless window behind.
-            if (IsVisible && DialogResult == null) Cancel_Click(this, new RoutedEventArgs());
+            // rather than leaving an orphaned borderless window behind — but ignore the very first
+            // Deactivated if the window was never actually Activated (see _hasActivated above).
+            if (_hasActivated && IsVisible && DialogResult == null) Cancel_Click(this, new RoutedEventArgs());
         }
     }
 
