@@ -26,6 +26,14 @@ namespace CameraCalibrationStudio.Views
                 UrlBox.Text = opt.Url;
         }
 
+        private void SaveForReuseCheck_CheckedChanged(object sender, RoutedEventArgs e)
+        {
+            if (SaveNameLabel == null || SaveNameBox == null) return;
+            var show = SaveForReuseCheck.IsChecked == true;
+            SaveNameLabel.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+            SaveNameBox.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+        }
+
         private async void Grab_Click(object sender, RoutedEventArgs e)
         {
             var url = UrlBox.Text.Trim();
@@ -44,6 +52,13 @@ namespace CameraCalibrationStudio.Views
                 {
                     ShowStatus("Could not grab a frame. Check the URL/network and try again.");
                     return;
+                }
+
+                if (SaveForReuseCheck.IsChecked == true)
+                {
+                    var saveName = SaveNameBox.Text.Trim();
+                    if (string.IsNullOrWhiteSpace(saveName)) saveName = url;
+                    ProfileStore.SaveRtspViewerCamera(saveName, url);
                 }
 
                 CapturedFrame = frame;

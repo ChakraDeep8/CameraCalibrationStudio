@@ -75,5 +75,50 @@ namespace CameraCalibrationStudio.Services
             catch { /* best-effort */ }
             return result;
         }
+
+        /// <summary>
+        /// Adds (or updates, by matching URL) a camera in the same saved-camera list the RTSP
+        /// Camera Viewer app reads from — so a camera typed once in "Grab Frame from RTSP" shows
+        /// up in the saved list next time, in either app. Returns false if name/url are invalid.
+        /// </summary>
+        public static bool SaveRtspViewerCamera(string name, string url)
+        {
+            if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(url)) return false;
+
+            System.Text.Json.Nodes.JsonArray root;
+            try
+            {
+                root = File.Exists(RtspViewerCamerasFile)
+                    ? (System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(RtspViewerCamerasFile)) as System.Text.Json.Nodes.JsonArray)
+                      ?? new System.Text.Json.Nodes.JsonArray()
+                    : new System.Text.Json.Nodes.JsonArray();
+            }
+            catch
+            {
+                root = new System.Text.Json.Nodes.JsonArray();
+            }
+
+            var existing = root.FirstOrDefault(n => string.Equals((string?)n?["Url"], url, StringComparison.OrdinalIgnoreCase));
+            if (existing != null)
+            {
+                existing["Name"] = name;
+            }
+            else
+            {
+                root.Add(new System.Text.Json.Nodes.JsonObject
+                {
+                    ["Id"] = Guid.NewGuid().ToString("N"),
+                    ["Name"] = name,
+                    ["Url"] = url,
+                    ["Username"] = null,
+                    ["Password"] = null
+                });
+            }
+
+            var dir = Path.GetDirectoryName(RtspViewerCamerasFile)!;
+            Directory.CreateDirectory(dir);
+            File.WriteAllText(RtspViewerCamerasFile, root.ToJsonString(JsonOptions));
+            return true;
+        }
     }
 }

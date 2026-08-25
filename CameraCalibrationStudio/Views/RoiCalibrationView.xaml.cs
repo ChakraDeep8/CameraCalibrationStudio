@@ -760,7 +760,14 @@ namespace CameraCalibrationStudio.Views
                 JsonCollapsedStrip.Visibility = Visibility.Collapsed;
                 JsonSplitter.Visibility = Visibility.Visible;
             }
+
+            // Collapsing/expanding this panel resizes the canvas but isn't a zoom action the user
+            // chose — make sure the image can never end up clipped by the new, narrower viewport.
+            Canvas.RefitAfterLayoutChange();
         }
+
+        private void Splitter_DragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e) =>
+            Canvas.RefitAfterLayoutChange();
 
         // =====================================================================
         // Batch

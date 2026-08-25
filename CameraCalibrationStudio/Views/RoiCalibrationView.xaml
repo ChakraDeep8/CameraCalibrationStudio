@@ -219,7 +219,7 @@
                 </ScrollViewer>
             </Border>
 
-            <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch" Background="Transparent"/>
+            <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch" Background="Transparent" DragCompleted="Splitter_DragCompleted"/>
 
             <!-- Center: canvas -->
             <Grid Grid.Column="2">
@@ -238,7 +238,7 @@
                 </Border>
             </Grid>
 
-            <GridSplitter x:Name="JsonSplitter" Grid.Column="3" Width="6" HorizontalAlignment="Stretch" Background="Transparent"/>
+            <GridSplitter x:Name="JsonSplitter" Grid.Column="3" Width="6" HorizontalAlignment="Stretch" Background="Transparent" DragCompleted="Splitter_DragCompleted"/>
 
             <!-- Right: live JSON (collapsible) -->
             <Border x:Name="JsonPanel" Grid.Column="4" Background="{StaticResource PanelBackground}">

@@ -139,6 +139,20 @@ namespace CameraCalibrationStudio.Controls
             _autoFitMode = true; // Fit re-engages auto-correction on future resizes
         }
 
+        /// <summary>
+        /// Call after a layout-only change that resizes the canvas but isn't a deliberate zoom
+        /// action — e.g. collapsing/expanding the JSON side panel, or dragging the column
+        /// splitters. Re-fits (no upscale) once the resulting layout has actually happened, and
+        /// re-arms auto-fit mode, so the image can never end up clipped/"cropped" by a viewport
+        /// that shrank out from under a zoom level the user never chose on purpose.
+        /// </summary>
+        public void RefitAfterLayoutChange()
+        {
+            if (_imageWidth <= 0) return;
+            _autoFitMode = true;
+            Dispatcher.BeginInvoke(new Action(FitWithoutUpscaling), System.Windows.Threading.DispatcherPriority.Loaded);
+        }
+
         public void SetZoomPercent(double percent)
         {
             _autoFitMode = false; // explicit zoom — stop auto-correcting on resize
