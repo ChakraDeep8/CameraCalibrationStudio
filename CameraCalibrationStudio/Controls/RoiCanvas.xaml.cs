@@ -99,18 +99,15 @@ namespace CameraCalibrationStudio.Controls
             ShapesCanvas.Width = originalWidth;
             ShapesCanvas.Height = originalHeight;
 
-            // Shows the image at its true native resolution (100%) whenever it already fits the
-            // canvas — no unnecessary downscaling. Only images actually larger than the canvas
-            // get scaled down (never up: a small image is never blown up/blurred to fill space).
-            // This guarantees the full frame is always visible with nothing cropped, while still
-            // showing pixel-for-pixel native detail whenever there's room for it.
+            // Scales the image to completely fill the canvas (matches the explicit "Fit" button) —
+            // no leftover empty canvas strip on any side. Use the 100% button for native resolution.
             if (Viewport.ActualWidth > 0 && Viewport.ActualHeight > 0)
             {
-                FitWithoutUpscaling();
+                FitToWindow();
             }
             else
             {
-                Dispatcher.BeginInvoke(new Action(FitWithoutUpscaling), System.Windows.Threading.DispatcherPriority.Loaded);
+                Dispatcher.BeginInvoke(new Action(FitToWindow), System.Windows.Threading.DispatcherPriority.Loaded);
             }
         }
 
@@ -120,16 +117,7 @@ namespace CameraCalibrationStudio.Controls
         // Zoom / pan
         // =====================================================================
 
-        /// <summary>Scales down to fit the canvas only if the image is larger than it; never scales up past 100%.</summary>
-        private void FitWithoutUpscaling()
-        {
-            if (_imageWidth <= 0 || _imageHeight <= 0 || Viewport.ActualWidth <= 0 || Viewport.ActualHeight <= 0) return;
-            double fitScale = Math.Min(Viewport.ActualWidth / _imageWidth, Viewport.ActualHeight / _imageHeight);
-            double scale = Math.Clamp(Math.Min(fitScale, 1.0), 0.02, 8.0);
-            SetZoom(scale, centerInViewport: true);
-        }
-
-        /// <summary>Explicit "Fit" action (button / 'F' key) — scales to fill the canvas, including upscaling small images.</summary>
+        /// <summary>Explicit "Fit" action (button / 'F' key), and also the default fit — scales to fill the canvas, including upscaling small images so no empty canvas space is left.</summary>
         public void FitToWindow()
         {
             if (_imageWidth <= 0 || _imageHeight <= 0 || Viewport.ActualWidth <= 0 || Viewport.ActualHeight <= 0) return;
@@ -150,7 +138,7 @@ namespace CameraCalibrationStudio.Controls
         {
             if (_imageWidth <= 0) return;
             _autoFitMode = true;
-            Dispatcher.BeginInvoke(new Action(FitWithoutUpscaling), System.Windows.Threading.DispatcherPriority.Loaded);
+            Dispatcher.BeginInvoke(new Action(FitToWindow), System.Windows.Threading.DispatcherPriority.Loaded);
         }
 
         public void SetZoomPercent(double percent)
@@ -204,7 +192,7 @@ namespace CameraCalibrationStudio.Controls
             // pre-maximize size and never correct, which looked like the image being cropped or
             // undersized.
             if (_autoFitMode && _imageWidth > 0 && Viewport.ActualWidth > 0 && Viewport.ActualHeight > 0)
-                FitWithoutUpscaling();
+                FitToWindow();
         }
 
         // =====================================================================
