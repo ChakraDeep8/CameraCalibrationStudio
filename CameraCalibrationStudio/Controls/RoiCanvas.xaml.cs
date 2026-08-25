@@ -90,7 +90,7 @@ namespace CameraCalibrationStudio.Controls
         {
             _imageWidth = originalWidth;
             _imageHeight = originalHeight;
-            _autoFitMode = false; // opens at native resolution, not scaled to fit the window
+            _autoFitMode = true;
             TransformRoot.Width = originalWidth;
             TransformRoot.Height = originalHeight;
             BackgroundImage.Width = originalWidth;
@@ -99,13 +99,19 @@ namespace CameraCalibrationStudio.Controls
             ShapesCanvas.Width = originalWidth;
             ShapesCanvas.Height = originalHeight;
 
-            // Opens at 100% (true pixel-for-pixel native resolution) rather than auto-scaled to
-            // fit the window — calibration coordinates are exact either way (zoom never affects
-            // them), but showing native resolution by default means what you see is exactly what
-            // the camera captured, with no visual scaling to second-guess. If the image is larger
-            // than the viewport it's simply not all visible at once — pan or click Fit to see it
-            // all. Centering only applies when the image is smaller than the viewport.
-            SetZoom(1.0, centerInViewport: true);
+            // Shows the image at its true native resolution (100%) whenever it already fits the
+            // canvas — no unnecessary downscaling. Only images actually larger than the canvas
+            // get scaled down (never up: a small image is never blown up/blurred to fill space).
+            // This guarantees the full frame is always visible with nothing cropped, while still
+            // showing pixel-for-pixel native detail whenever there's room for it.
+            if (Viewport.ActualWidth > 0 && Viewport.ActualHeight > 0)
+            {
+                FitWithoutUpscaling();
+            }
+            else
+            {
+                Dispatcher.BeginInvoke(new Action(FitWithoutUpscaling), System.Windows.Threading.DispatcherPriority.Loaded);
+            }
         }
 
         public void SetPreviewImage(BitmapSource bitmap) => BackgroundImage.Source = bitmap;
@@ -114,6 +120,16 @@ namespace CameraCalibrationStudio.Controls
         // Zoom / pan
         // =====================================================================
 
+        /// <summary>Scales down to fit the canvas only if the image is larger than it; never scales up past 100%.</summary>
+        private void FitWithoutUpscaling()
+        {
+            if (_imageWidth <= 0 || _imageHeight <= 0 || Viewport.ActualWidth <= 0 || Viewport.ActualHeight <= 0) return;
+            double fitScale = Math.Min(Viewport.ActualWidth / _imageWidth, Viewport.ActualHeight / _imageHeight);
+            double scale = Math.Clamp(Math.Min(fitScale, 1.0), 0.02, 8.0);
+            SetZoom(scale, centerInViewport: true);
+        }
+
+        /// <summary>Explicit "Fit" action (button / 'F' key) — scales to fill the canvas, including upscaling small images.</summary>
         public void FitToWindow()
         {
             if (_imageWidth <= 0 || _imageHeight <= 0 || Viewport.ActualWidth <= 0 || Viewport.ActualHeight <= 0) return;
@@ -174,7 +190,7 @@ namespace CameraCalibrationStudio.Controls
             // pre-maximize size and never correct, which looked like the image being cropped or
             // undersized.
             if (_autoFitMode && _imageWidth > 0 && Viewport.ActualWidth > 0 && Viewport.ActualHeight > 0)
-                FitToWindow();
+                FitWithoutUpscaling();
         }
 
         // =====================================================================
