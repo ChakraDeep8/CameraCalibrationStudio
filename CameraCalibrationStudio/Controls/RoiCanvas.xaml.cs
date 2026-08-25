@@ -48,6 +48,7 @@ namespace CameraCalibrationStudio.Controls
         public double CurrentZoomPercent => Scale.ScaleX * 100.0;
 
         private int _imageWidth, _imageHeight;
+        private bool _hasFittedOnce;
         private CalibrationObjectBase? _pendingNewShape;
 
         // drag state
@@ -80,6 +81,7 @@ namespace CameraCalibrationStudio.Controls
         {
             _imageWidth = originalWidth;
             _imageHeight = originalHeight;
+            _hasFittedOnce = false;
             TransformRoot.Width = originalWidth;
             TransformRoot.Height = originalHeight;
             BackgroundImage.Width = originalWidth;
@@ -87,7 +89,21 @@ namespace CameraCalibrationStudio.Controls
             BackgroundImage.Source = bitmap;
             ShapesCanvas.Width = originalWidth;
             ShapesCanvas.Height = originalHeight;
-            FitToWindow();
+
+            // The viewport may not have been laid out yet (e.g. the very first image opened,
+            // before the window has completed its first layout pass) — Viewport.ActualWidth/
+            // Height would still be 0, silently making FitToWindow() a no-op and leaving the
+            // image at 100% zoom anchored top-left, so only its top-left corner is visible
+            // inside the clipped viewport. That looked like the image being "cropped" to a
+            // fixed size. Retry once layout has actually happened, in addition to trying now.
+            if (Viewport.ActualWidth > 0 && Viewport.ActualHeight > 0)
+            {
+                FitToWindow();
+            }
+            else
+            {
+                Dispatcher.BeginInvoke(new Action(FitToWindow), System.Windows.Threading.DispatcherPriority.Loaded);
+            }
         }
 
         public void SetPreviewImage(BitmapSource bitmap) => BackgroundImage.Source = bitmap;
@@ -102,6 +118,7 @@ namespace CameraCalibrationStudio.Controls
             double scale = Math.Min(Viewport.ActualWidth / _imageWidth, Viewport.ActualHeight / _imageHeight);
             scale = Math.Clamp(scale, 0.02, 8.0);
             SetZoom(scale, centerInViewport: true);
+            _hasFittedOnce = true;
         }
 
         public void SetZoomPercent(double percent) => SetZoom(percent / 100.0, centerInViewport: true);
@@ -143,7 +160,13 @@ namespace CameraCalibrationStudio.Controls
 
         private void Viewport_SizeChanged(object sender, SizeChangedEventArgs e)
         {
-            // Keep the current zoom; only auto-fit is explicit (Fit button / 'F' key).
+            // Normally, resizing the window keeps the current zoom (auto-fit is explicit via the
+            // Fit button / 'F' key). The one exception: if an image was loaded before the
+            // viewport had ever been laid out (ActualWidth/Height was still 0), FitToWindow()
+            // couldn't do anything at load time — fit now that real dimensions exist, instead of
+            // leaving the image stuck at 100% zoom anchored top-left (which looks like cropping).
+            if (!_hasFittedOnce && _imageWidth > 0 && Viewport.ActualWidth > 0 && Viewport.ActualHeight > 0)
+                FitToWindow();
         }
 
         // =====================================================================
