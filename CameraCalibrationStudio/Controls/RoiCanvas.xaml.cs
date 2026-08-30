@@ -99,16 +99,15 @@ namespace CameraCalibrationStudio.Controls
             ShapesCanvas.Width = originalWidth;
             ShapesCanvas.Height = originalHeight;
 
-            // Scales the image to completely fill the canvas (matches the explicit "Fit" button) —
-            // no leftover empty canvas strip on any side. Use the 100% button for native resolution.
-            if (Viewport.ActualWidth > 0 && Viewport.ActualHeight > 0)
-            {
-                FitToWindow();
-            }
-            else
-            {
-                Dispatcher.BeginInvoke(new Action(FitToWindow), System.Windows.Threading.DispatcherPriority.Loaded);
-            }
+            // Always opens at true native (100%) resolution, centered. Unlike a computed "fit"
+            // scale, this doesn't depend on the viewport already having its final size — loading
+            // an image right as a dialog closes (Open Image / Grab Frame) could catch the main
+            // window's layout mid-settle, lock in a scale computed against a stale (too-large)
+            // viewport, and then get visibly clipped once the real, smaller layout took over.
+            // Native scale sidesteps that class of bug entirely. Use Fit / the Fit button to scale
+            // a large image down to the canvas.
+            _autoFitMode = false;
+            SetZoom(1.0, centerInViewport: true);
         }
 
         public void SetPreviewImage(BitmapSource bitmap) => BackgroundImage.Source = bitmap;
