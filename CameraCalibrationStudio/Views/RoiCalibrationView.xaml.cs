@@ -308,6 +308,13 @@ namespace CameraCalibrationStudio.Views
             await Task.CompletedTask;
         }
 
+        private void GrabVideo_Click(object sender, RoutedEventArgs e)
+        {
+            var dlg = new VideoGrabDialog { Owner = Window.GetWindow(this) };
+            if (dlg.ShowDialog() == true && dlg.CapturedFrame != null)
+                LoadImageMat(dlg.CapturedFrame, dlg.SuggestedName, "", "");
+        }
+
         /// <summary>Common entry point for both "Open Image" and "Grab Frame from RTSP" — takes ownership of mat.</summary>
         private void LoadImageMat(Mat mat, string displayName, string path, string suggestedDeviceId)
         {
@@ -548,20 +555,16 @@ namespace CameraCalibrationStudio.Views
                 return;
             }
 
-            if (pickerResult == true && picker.Outcome == ClassPickerOutcome.Custom)
+            // Custom: the user typed a name but left "add as new class" unticked, so the name is
+            // used for this region only and nothing is written to the class library.
+            if (pickerResult == true && picker.Outcome == ClassPickerOutcome.Custom
+                && !string.IsNullOrWhiteSpace(picker.TypedName))
             {
-                var dlg = new NameShapeDialog("Name this region", "", _document.Objects.Select(o => o.Name).ToList())
-                {
-                    Owner = Window.GetWindow(this)
-                };
-                if (dlg.ShowDialog() == true)
-                {
-                    pending.Name = dlg.ResultName;
-                    Canvas.CommitPendingShape();
-                    _dirty = true;
-                    FinishShapeCreation();
-                    return;
-                }
+                pending.Name = picker.TypedName!;
+                Canvas.CommitPendingShape();
+                _dirty = true;
+                FinishShapeCreation();
+                return;
             }
 
             Canvas.DiscardPendingShape();
