@@ -91,13 +91,6 @@
                                          Style="{StaticResource ToolRadioButton}" Margin="3,0,0,0"/>
                         </Grid>
 
-                        <StackPanel>
-                            <RadioButton x:Name="ToolRectangle" Content="▭  Rectangle" GroupName="Tools" Style="{StaticResource ToolRadioButton}" Checked="Tool_Checked"/>
-                            <RadioButton x:Name="ToolSquare" Content="□  Square" GroupName="Tools" Style="{StaticResource ToolRadioButton}" Checked="Tool_Checked"/>
-                            <RadioButton x:Name="ToolPolygon" Content="⬠  Polygon" GroupName="Tools" Style="{StaticResource ToolRadioButton}" Checked="Tool_Checked"/>
-                            <RadioButton x:Name="ToolLine" Content="╱  Line" GroupName="Tools" Style="{StaticResource ToolRadioButton}" Checked="Tool_Checked"/>
-                            <RadioButton x:Name="ToolPan" Content="✋  Pan" GroupName="Tools" Style="{StaticResource ToolRadioButton}" Checked="Tool_Checked"/>
-                        </StackPanel>
                         <TextBlock x:Name="ToolHintText" Text="Click an existing region to select, move, resize or rename it."
                                    Foreground="{StaticResource TextSecondary}" FontSize="11" TextWrapping="Wrap" Margin="0,8,0,4"/>
 
@@ -233,8 +226,42 @@
             <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch" Background="Transparent" DragCompleted="Splitter_DragCompleted"/>
 
             <!-- Center: canvas -->
-            <Grid Grid.Column="2">
+            <Grid Grid.Column="2" x:Name="CanvasHost" ClipToBounds="True">
                 <controls:RoiCanvas x:Name="Canvas"/>
+
+                <!-- Floating draw-tools toolbar. A sibling overlay of the canvas rather than a
+                     child of it, so it stays put while the image is panned and zoomed underneath,
+                     and takes no space out of the canvas layout. Drag the grip to move it. -->
+                <Border x:Name="FloatingTools" HorizontalAlignment="Center" VerticalAlignment="Top"
+                        Margin="0,14,0,0" CornerRadius="8" Padding="5,4" Panel.ZIndex="20"
+                        Background="#E62A2A33" BorderBrush="#4A4A57" BorderThickness="1">
+                    <Border.RenderTransform>
+                        <TranslateTransform x:Name="FloatingToolsOffset" X="0" Y="0"/>
+                    </Border.RenderTransform>
+                    <Border.Effect>
+                        <DropShadowEffect BlurRadius="14" ShadowDepth="2" Direction="270" Opacity="0.55" Color="Black"/>
+                    </Border.Effect>
+                    <StackPanel Orientation="Horizontal">
+                        <!-- Drag grip -->
+                        <TextBlock x:Name="FloatingToolsGrip" Text="⠿" Foreground="{StaticResource TextSecondary}"
+                                   FontSize="14" VerticalAlignment="Center" Margin="3,0,6,0" Cursor="SizeAll"
+                                   ToolTip="Drag to move this toolbar"
+                                   MouseLeftButtonDown="FloatingToolsGrip_MouseLeftButtonDown"/>
+                        <Border Width="1" Background="#4A4A57" Margin="0,4,5,4"/>
+
+                        <RadioButton x:Name="ToolRectangle" Content="▭" GroupName="Tools" ToolTip="Rectangle"
+                                     Style="{StaticResource FloatingToolButton}" Checked="Tool_Checked"/>
+                        <RadioButton x:Name="ToolSquare" Content="□" GroupName="Tools" ToolTip="Square"
+                                     Style="{StaticResource FloatingToolButton}" Checked="Tool_Checked"/>
+                        <RadioButton x:Name="ToolPolygon" Content="⬠" GroupName="Tools" ToolTip="Polygon"
+                                     Style="{StaticResource FloatingToolButton}" Checked="Tool_Checked"/>
+                        <RadioButton x:Name="ToolLine" Content="╱" GroupName="Tools" ToolTip="Line"
+                                     Style="{StaticResource FloatingToolButton}" Checked="Tool_Checked"/>
+                        <Border Width="1" Background="#4A4A57" Margin="5,4"/>
+                        <RadioButton x:Name="ToolPan" Content="✋" GroupName="Tools" ToolTip="Pan (or hold Space)"
+                                     Style="{StaticResource FloatingToolButton}" Checked="Tool_Checked"/>
+                    </StackPanel>
+                </Border>
 
                 <!-- Empty state -->
                 <Border x:Name="EmptyState" Background="{StaticResource TileBackground}" CornerRadius="8" Margin="30"

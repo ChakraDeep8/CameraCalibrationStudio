@@ -497,6 +497,56 @@ namespace CameraCalibrationStudio.Views
         }
 
         /// <summary>Returns to normal select/edit behavior — called after a shape is created or cancelled.</summary>
+        // ---- Floating tool toolbar dragging ----------------------------------------
+        // Repositioning is done with a TranslateTransform rather than by changing Margin, so the
+        // toolbar keeps its top-centre anchor and simply gets nudged from there. The offset is
+        // clamped to the canvas host on every move, so the bar can never be dragged off-screen
+        // and stranded where it cannot be grabbed again.
+
+        private bool _draggingTools;
+        private Point _toolsDragStart;
+        private double _toolsStartX, _toolsStartY;
+
+        private void FloatingToolsGrip_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            _draggingTools = true;
+            _toolsDragStart = e.GetPosition(CanvasHost);
+            _toolsStartX = FloatingToolsOffset.X;
+            _toolsStartY = FloatingToolsOffset.Y;
+            FloatingToolsGrip.CaptureMouse();
+
+            FloatingToolsGrip.MouseMove += FloatingToolsGrip_MouseMove;
+            FloatingToolsGrip.MouseLeftButtonUp += FloatingToolsGrip_MouseLeftButtonUp;
+            e.Handled = true;
+        }
+
+        private void FloatingToolsGrip_MouseMove(object sender, MouseEventArgs e)
+        {
+            if (!_draggingTools) return;
+
+            var now = e.GetPosition(CanvasHost);
+            double x = _toolsStartX + (now.X - _toolsDragStart.X);
+            double y = _toolsStartY + (now.Y - _toolsDragStart.Y);
+
+            // Keep the bar inside the canvas area. Its untranslated position is top-centre with a
+            // 14px top margin, so those are the bounds the offset is measured against.
+            double halfSlack = Math.Max(0, (CanvasHost.ActualWidth - FloatingTools.ActualWidth) / 2.0);
+            double maxDown = Math.Max(0, CanvasHost.ActualHeight - FloatingTools.ActualHeight - 14);
+
+            FloatingToolsOffset.X = Math.Clamp(x, -halfSlack, halfSlack);
+            FloatingToolsOffset.Y = Math.Clamp(y, -14, maxDown);
+        }
+
+        private void FloatingToolsGrip_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+        {
+            if (!_draggingTools) return;
+            _draggingTools = false;
+            FloatingToolsGrip.ReleaseMouseCapture();
+
+            FloatingToolsGrip.MouseMove -= FloatingToolsGrip_MouseMove;
+            FloatingToolsGrip.MouseLeftButtonUp -= FloatingToolsGrip_MouseLeftButtonUp;
+        }
+
         private void ResetToolToSelect()
         {
             ToolRectangle.IsChecked = false;
