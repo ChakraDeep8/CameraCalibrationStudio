@@ -58,6 +58,11 @@ namespace CameraCalibrationStudio.Controls
         /// correct itself, which showed up as the image looking wrong-sized/"cropped".
         /// </summary>
         private bool _autoFitMode;
+
+        // Fit-convergence state: see ScheduleFitUntilStable.
+        private bool _fitConverging;
+        private Size _lastFitViewport = Size.Empty;
+
         private CalibrationObjectBase? _pendingNewShape;
 
         // drag state
@@ -101,16 +106,60 @@ namespace CameraCalibrationStudio.Controls
 
             // Opens at native (100%) resolution whenever the image already fits the canvas;
             // only scales DOWN (never up) when it's actually larger than the visible canvas —
-            // this is a contain-fit, so the full image is always visible and nothing is ever
-            // clipped, regardless of image size vs. canvas size. _autoFitMode stays on so later
-            // window/layout changes keep re-fitting too (see Viewport_SizeChanged), which also
-            // covers the case where the viewport hasn't reached its final size yet at load time
-            // (e.g. right as the Open Image / Grab Frame dialog is closing).
+            // a contain-fit, so the full image is always visible and nothing is ever clipped.
             _autoFitMode = true;
             if (Viewport.ActualWidth > 0 && Viewport.ActualHeight > 0)
                 FitWithoutUpscaling();
-            else
-                Dispatcher.BeginInvoke(new Action(FitWithoutUpscaling), System.Windows.Threading.DispatcherPriority.Loaded);
+
+            // ...then keep re-fitting until the viewport size actually stops changing. A single
+            // fit (even deferred to DispatcherPriority.Loaded) can still run against a viewport
+            // that is mid-settle — the dialog that triggered the load is still closing, the
+            // sidebar/JSON panel haven't taken their final width, the status bar hasn't been
+            // measured. The fit then locks in a scale for a TALLER canvas than the one that
+            // ends up existing, and the bottom of the image is clipped by the viewport bounds.
+            // That was the "bottom portion cropped every time" bug: the scale was right for the
+            // canvas at fit time, just not for the canvas a few layout passes later.
+            ScheduleFitUntilStable();
+        }
+
+        /// <summary>
+        /// Re-runs the contain-fit on every layout pass until the viewport size repeats, then
+        /// detaches. Guarantees the final fit is computed against the settled canvas size rather
+        /// than whatever it happened to be at load time.
+        /// </summary>
+        private void ScheduleFitUntilStable()
+        {
+            if (_fitConverging) return;
+            _fitConverging = true;
+            _lastFitViewport = Size.Empty;
+            Viewport.LayoutUpdated += Viewport_LayoutUpdatedForFit;
+        }
+
+        private void Viewport_LayoutUpdatedForFit(object? sender, EventArgs e)
+        {
+            if (!_autoFitMode || _imageWidth <= 0)
+            {
+                StopFitConverging();
+                return;
+            }
+            if (Viewport.ActualWidth <= 0 || Viewport.ActualHeight <= 0) return;
+
+            var current = new Size(Viewport.ActualWidth, Viewport.ActualHeight);
+            if (current == _lastFitViewport)
+            {
+                StopFitConverging(); // size held steady for a full pass — layout has settled
+                return;
+            }
+
+            _lastFitViewport = current;
+            FitWithoutUpscaling();
+        }
+
+        private void StopFitConverging()
+        {
+            if (!_fitConverging) return;
+            _fitConverging = false;
+            Viewport.LayoutUpdated -= Viewport_LayoutUpdatedForFit;
         }
 
         /// <summary>Scales down to contain the image within the canvas only if it's larger than
@@ -151,7 +200,7 @@ namespace CameraCalibrationStudio.Controls
         {
             if (_imageWidth <= 0) return;
             _autoFitMode = true;
-            Dispatcher.BeginInvoke(new Action(FitWithoutUpscaling), System.Windows.Threading.DispatcherPriority.Loaded);
+            ScheduleFitUntilStable();
         }
 
         public void SetZoomPercent(double percent)
@@ -350,13 +399,30 @@ namespace CameraCalibrationStudio.Controls
             Math.Clamp(p.X, 0, _imageWidth),
             Math.Clamp(p.Y, 0, _imageHeight));
 
+        /// <summary>True when the image at the current zoom is bigger than the visible canvas on
+        /// either axis — i.e. there is genuinely something off-screen to pan to.</summary>
+        private bool ImageOverflowsViewport()
+        {
+            if (_imageWidth <= 0 || _imageHeight <= 0) return false;
+            const double tolerance = 1.0; // ignore sub-pixel rounding
+            return _imageWidth * Scale.ScaleX > Viewport.ActualWidth + tolerance
+                || _imageHeight * Scale.ScaleY > Viewport.ActualHeight + tolerance;
+        }
+
         // =====================================================================
         // Pan
         // =====================================================================
 
         private void StartPan(MouseButtonEventArgs e)
         {
-            _autoFitMode = false; // explicit pan — stop auto-correcting on resize
+            // Panning normally means "I've chosen my own view, stop auto-correcting it" — but only
+            // when there is actually something to pan to. If the image already fits entirely in the
+            // canvas, a stray click/drag with the Pan tool would otherwise silently disarm auto-fit
+            // for good, so any later canvas shrink (panel toggle, window resize) would clip the
+            // image with nothing left to re-fit it.
+            if (ImageOverflowsViewport())
+                _autoFitMode = false;
+
             _isPanning = true;
             _panMouseStart = e.GetPosition(Viewport);
             _panTranslateStartX = Translate.X;
