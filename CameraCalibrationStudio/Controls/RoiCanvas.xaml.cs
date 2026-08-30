@@ -99,15 +99,29 @@ namespace CameraCalibrationStudio.Controls
             ShapesCanvas.Width = originalWidth;
             ShapesCanvas.Height = originalHeight;
 
-            // Always opens at true native (100%) resolution, centered. Unlike a computed "fit"
-            // scale, this doesn't depend on the viewport already having its final size — loading
-            // an image right as a dialog closes (Open Image / Grab Frame) could catch the main
-            // window's layout mid-settle, lock in a scale computed against a stale (too-large)
-            // viewport, and then get visibly clipped once the real, smaller layout took over.
-            // Native scale sidesteps that class of bug entirely. Use Fit / the Fit button to scale
-            // a large image down to the canvas.
-            _autoFitMode = false;
-            SetZoom(1.0, centerInViewport: true);
+            // Opens at native (100%) resolution whenever the image already fits the canvas;
+            // only scales DOWN (never up) when it's actually larger than the visible canvas —
+            // this is a contain-fit, so the full image is always visible and nothing is ever
+            // clipped, regardless of image size vs. canvas size. _autoFitMode stays on so later
+            // window/layout changes keep re-fitting too (see Viewport_SizeChanged), which also
+            // covers the case where the viewport hasn't reached its final size yet at load time
+            // (e.g. right as the Open Image / Grab Frame dialog is closing).
+            _autoFitMode = true;
+            if (Viewport.ActualWidth > 0 && Viewport.ActualHeight > 0)
+                FitWithoutUpscaling();
+            else
+                Dispatcher.BeginInvoke(new Action(FitWithoutUpscaling), System.Windows.Threading.DispatcherPriority.Loaded);
+        }
+
+        /// <summary>Scales down to contain the image within the canvas only if it's larger than
+        /// the canvas; never scales up past 100%. Unlike FitToWindow, this never crops — the
+        /// resulting size is always &lt;= the viewport on both axes.</summary>
+        private void FitWithoutUpscaling()
+        {
+            if (_imageWidth <= 0 || _imageHeight <= 0 || Viewport.ActualWidth <= 0 || Viewport.ActualHeight <= 0) return;
+            double fitScale = Math.Min(Viewport.ActualWidth / _imageWidth, Viewport.ActualHeight / _imageHeight);
+            double scale = Math.Clamp(Math.Min(fitScale, 1.0), 0.02, 8.0);
+            SetZoom(scale, centerInViewport: true);
         }
 
         public void SetPreviewImage(BitmapSource bitmap) => BackgroundImage.Source = bitmap;
@@ -116,7 +130,7 @@ namespace CameraCalibrationStudio.Controls
         // Zoom / pan
         // =====================================================================
 
-        /// <summary>Explicit "Fit" action (button / 'F' key), and also the default fit — scales to fill the canvas, including upscaling small images so no empty canvas space is left.</summary>
+        /// <summary>Explicit "Fit" action (button / 'F' key) — scales to fill the canvas, including upscaling small images. Never crops (same Min-of-both-axes math as FitWithoutUpscaling), just allows scaling past 100%.</summary>
         public void FitToWindow()
         {
             if (_imageWidth <= 0 || _imageHeight <= 0 || Viewport.ActualWidth <= 0 || Viewport.ActualHeight <= 0) return;
@@ -137,7 +151,7 @@ namespace CameraCalibrationStudio.Controls
         {
             if (_imageWidth <= 0) return;
             _autoFitMode = true;
-            Dispatcher.BeginInvoke(new Action(FitToWindow), System.Windows.Threading.DispatcherPriority.Loaded);
+            Dispatcher.BeginInvoke(new Action(FitWithoutUpscaling), System.Windows.Threading.DispatcherPriority.Loaded);
         }
 
         public void SetZoomPercent(double percent)
@@ -191,7 +205,7 @@ namespace CameraCalibrationStudio.Controls
             // pre-maximize size and never correct, which looked like the image being cropped or
             // undersized.
             if (_autoFitMode && _imageWidth > 0 && Viewport.ActualWidth > 0 && Viewport.ActualHeight > 0)
-                FitToWindow();
+                FitWithoutUpscaling();
         }
 
         // =====================================================================
