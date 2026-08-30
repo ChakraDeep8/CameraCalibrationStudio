@@ -1,4 +1,4 @@
-<UserControl x:Class="CameraCalibrationStudio.Views.RoiCalibrationView"
+﻿<UserControl x:Class="CameraCalibrationStudio.Views.RoiCalibrationView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:controls="clr-namespace:CameraCalibrationStudio.Controls"
@@ -256,7 +256,9 @@
                     <TextBox x:Name="JsonText" Background="#17171C" Foreground="{StaticResource TextPrimary}" BorderThickness="0"
                              FontFamily="Consolas" FontSize="12" IsReadOnly="True" TextWrapping="NoWrap"
                              VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" Padding="8"
-                             DockPanel.Dock="Top" Height="Auto" MinHeight="120"/>
+                             DockPanel.Dock="Top" Height="Auto" MinHeight="120"
+                             IsInactiveSelectionHighlightEnabled="True"
+                             SelectionBrush="#3D8BFF" SelectionOpacity="0.35"/>
 
                     <Expander DockPanel.Dock="Bottom" Header="Production Export Settings" Foreground="{StaticResource TextSecondary}" Margin="0,8,0,0" FontSize="11.5">
                         <StackPanel Margin="0,8,0,4">

@@ -614,12 +614,85 @@ namespace CameraCalibrationStudio.Views
             _syncingSelection = false;
         }
 
+        // Char/string literals used by the JSON highlight scanner.
+        private const char QUOTE = '"';
+        private const char BACKSLASH = '\\';
+        private const char OPEN_BRACE = '{';
+        private const char CLOSE_BRACE = '}';
+        private static readonly string NAME_KEY = "\"name\": ";
+
         private void OnCanvasSelectionChanged(CalibrationObjectBase? obj)
         {
-            if (_syncingSelection) return;
-            _syncingSelection = true;
-            ObjectList.SelectedItem = obj;
-            _syncingSelection = false;
+            // The list sync is guarded (it re-enters via ObjectList_SelectionChanged), but the
+            // JSON highlight must run on BOTH paths - selecting on the canvas and selecting in
+            // the object list should each jump the JSON panel to that region.
+            if (!_syncingSelection)
+            {
+                _syncingSelection = true;
+                ObjectList.SelectedItem = obj;
+                _syncingSelection = false;
+            }
+
+            HighlightInJson(obj);
+        }
+
+        /// <summary>
+        /// Selects and scrolls the JSON panel to the block describing <paramref name="obj"/>, so
+        /// picking a zone on the canvas reveals its calibration entry. Re-runs on every refresh
+        /// during a drag, which is what makes the coordinates visibly tick over live.
+        /// </summary>
+        private void HighlightInJson(CalibrationObjectBase? obj)
+        {
+            if (JsonText == null) return;
+
+            if (obj == null || !_document.HasImage)
+            {
+                JsonText.Select(0, 0);
+                return;
+            }
+
+            var text = JsonText.Text;
+            // Match the same escaping the JSON writer produces for the name value.
+            var needle = NAME_KEY + System.Text.Json.JsonSerializer.Serialize(obj.Name);
+            int nameIdx = text.IndexOf(needle, StringComparison.Ordinal);
+            if (nameIdx < 0) return;
+
+            int start = text.LastIndexOf(OPEN_BRACE, nameIdx);
+            if (start < 0) start = nameIdx;
+            int end = FindMatchingBrace(text, start);
+            int length = end > start ? end - start + 1 : needle.Length;
+
+            JsonText.Select(start, length);
+
+            // Show a couple of lines of lead-in so the block reads in context rather than being
+            // pinned to the very top edge of the panel.
+            int line = JsonText.GetLineIndexFromCharacterIndex(start);
+            JsonText.ScrollToLine(Math.Max(0, line - 2));
+        }
+
+        /// <summary>Index of the closing brace matching the one at <paramref name="openIndex"/>, or -1. String-aware.</summary>
+        private static int FindMatchingBrace(string text, int openIndex)
+        {
+            int depth = 0;
+            bool inString = false, escaped = false;
+
+            for (int i = openIndex; i < text.Length; i++)
+            {
+                char c = text[i];
+
+                if (inString)
+                {
+                    if (escaped) escaped = false;
+                    else if (c == BACKSLASH) escaped = true;
+                    else if (c == QUOTE) inString = false;
+                    continue;
+                }
+
+                if (c == QUOTE) inString = true;
+                else if (c == OPEN_BRACE) depth++;
+                else if (c == CLOSE_BRACE && --depth == 0) return i;
+            }
+            return -1;
         }
 
         private void DeleteObjectGlyph_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -981,6 +1054,10 @@ namespace CameraCalibrationStudio.Views
             // before JsonText further down the tree exists yet.
             if (JsonText == null) return;
             JsonText.Text = _document.HasImage ? RoiJsonService.ToPrettyString(_document, ResolveClassName) : "{\n}";
+            // Rewriting Text drops any selection, so restore the highlight on the selected zone.
+            // During a point drag this runs on every mouse-move, keeping the block scrolled
+            // into view with its coordinates updating live.
+            HighlightInJson(Canvas.Selected);
             UpdateStatusBar();
         }
 
