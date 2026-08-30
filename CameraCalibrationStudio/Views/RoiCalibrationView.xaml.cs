@@ -510,7 +510,7 @@ namespace CameraCalibrationStudio.Views
                 ToolMode.Polygon => "Polygon: Click to add points • Enter or double-click to finish • Esc to cancel • Backspace removes the last point.",
                 ToolMode.Line => "Line: Click and drag from the start point to the end point.",
                 ToolMode.Pan => "Pan: Click and drag to move around the image. Mouse wheel zooms.",
-                _ => "Click a region to select it • drag its point handles to edit • Ctrl+drag inside it to move the whole region."
+                _ => "Click a region to select it • drag its point handles to edit • double-click a polygon edge to add a point • Ctrl+drag inside it to move it."
             };
         }
 

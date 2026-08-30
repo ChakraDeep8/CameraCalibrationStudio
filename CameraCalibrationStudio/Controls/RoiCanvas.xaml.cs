@@ -273,6 +273,13 @@ namespace CameraCalibrationStudio.Controls
                 return;
             }
 
+            // Double-clicking the outline of the selected polygon inserts a vertex there.
+            if (e.ClickCount == 2 && Tool == ToolMode.Select && TryInsertPolygonPoint(pos))
+            {
+                e.Handled = true;
+                return;
+            }
+
             bool spacePan = Keyboard.IsKeyDown(Key.Space);
             if (Tool == ToolMode.Pan || spacePan)
             {
@@ -625,7 +632,73 @@ namespace CameraCalibrationStudio.Controls
                 return;
             }
 
+            // Clicking exactly on the selected polygon's outline must not deselect it: the
+            // outline can fall marginally outside the fill that HitTestBody tests, and the first
+            // click of an add-a-vertex double-click lands right there.
+            if (Selected is PolygonObject outlinePoly && HitTestPolygonEdge(outlinePoly, pos) >= 0)
+                return;
+
             Select(null);
+        }
+
+        /// <summary>
+        /// Inserts a vertex where the user double-clicked the selected polygon's outline. The new
+        /// point is projected onto the edge rather than placed at the raw cursor position, so the
+        /// outline keeps its exact shape until the point is actually dragged. No-op (returns
+        /// false) unless a polygon is selected and the click is on one of its edges.
+        /// </summary>
+        private bool TryInsertPolygonPoint(Point pos)
+        {
+            if (Document == null || Selected is not PolygonObject poly) return false;
+
+            int edge = HitTestPolygonEdge(poly, pos);
+            if (edge < 0) return false;
+
+            var a = poly.Points[edge];
+            var b = poly.Points[(edge + 1) % poly.Points.Count];
+
+            History?.Snapshot(Document.Objects);
+            // Insert after the edge's start point. For the closing edge (last -> first) that is
+            // an append, which is also correct.
+            poly.Points.Insert(edge + 1, ClosestPointOnSegment(pos, a, b));
+
+            RedrawAll();
+            Changed?.Invoke();
+            return true;
+        }
+
+        /// <summary>
+        /// Index of the polygon edge nearest <paramref name="pos"/>, or -1 if none is within the
+        /// hit tolerance. The closing edge (last point back to the first) is included, and the
+        /// tolerance is kept constant in SCREEN pixels so it does not get unusably tight when
+        /// zoomed out.
+        /// </summary>
+        private int HitTestPolygonEdge(PolygonObject poly, Point pos)
+        {
+            if (poly.Points.Count < 2) return -1;
+
+            double tolerance = 8 / Math.Max(Scale.ScaleX, 0.001);
+            int best = -1;
+            double bestDistance = double.MaxValue;
+
+            for (int i = 0; i < poly.Points.Count; i++)
+            {
+                var a = poly.Points[i];
+                var b = poly.Points[(i + 1) % poly.Points.Count];
+                double d = DistancePointToSegment(pos, a, b);
+                if (d < bestDistance) { bestDistance = d; best = i; }
+            }
+
+            return bestDistance <= tolerance ? best : -1;
+        }
+
+        /// <summary>Projection of <paramref name="p"/> onto segment a-b, clamped to the segment.</summary>
+        private static Point ClosestPointOnSegment(Point p, Point a, Point b)
+        {
+            double dx = b.X - a.X, dy = b.Y - a.Y;
+            double lenSq = dx * dx + dy * dy;
+            double t = lenSq < 1e-6 ? 0 : Math.Clamp(((p.X - a.X) * dx + (p.Y - a.Y) * dy) / lenSq, 0, 1);
+            return new Point(a.X + t * dx, a.Y + t * dy);
         }
 
         private static bool HitTestBody(CalibrationObjectBase obj, Point p)
