@@ -112,11 +112,20 @@
 
                         <Expander x:Name="ObjectsExpander" Header="CALIBRATION OBJECTS" IsExpanded="True" Foreground="{StaticResource TextSecondary}" FontSize="11" FontWeight="SemiBold" Margin="0,14,0,0">
                             <StackPanel Margin="0,8,0,0">
+                                <!-- Fixed header: the class filter stays put while the list below scrolls. -->
                                 <ComboBox x:Name="ClassFilterCombo" Margin="0,0,0,6" SelectionChanged="ClassFilterCombo_SelectionChanged"/>
-                                <ListBox x:Name="ObjectList" Background="Transparent" BorderThickness="0"
-                                         ScrollViewer.VerticalScrollBarVisibility="Disabled"
-                                         ItemContainerStyle="{StaticResource ObjectListItem}"
-                                         SelectionChanged="ObjectList_SelectionChanged">
+
+                                <!-- The object list gets its own fixed-height, independently scrolling
+                                     panel. It previously had its scrollbar Disabled, so it grew to fit
+                                     every object and pushed ADJUSTMENTS / COLOR / FILTERS down the
+                                     sidebar once a calibration had more than a handful of regions. -->
+                                <Border Background="#17171C" CornerRadius="4" BorderBrush="{StaticResource BorderSubtle}"
+                                        BorderThickness="1" MaxHeight="340">
+                                    <ListBox x:Name="ObjectList" Background="Transparent" BorderThickness="0"
+                                             ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                             ItemContainerStyle="{StaticResource ObjectListItem}"
+                                             SelectionChanged="ObjectList_SelectionChanged">
                                     <ListBox.ItemTemplate>
                                         <DataTemplate>
                                             <Grid>
@@ -143,7 +152,8 @@
                                             </Grid>
                                         </DataTemplate>
                                     </ListBox.ItemTemplate>
-                                </ListBox>
+                                    </ListBox>
+                                </Border>
                             </StackPanel>
                         </Expander>
 
