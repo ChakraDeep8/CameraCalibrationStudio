@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
@@ -374,8 +374,12 @@ namespace CameraCalibrationStudio.Controls
                 return;
             }
 
-            _isMovingShape = false;
-            _isDraggingHandle = false;
+            if (_isMovingShape || _isDraggingHandle)
+            {
+                _isMovingShape = false;
+                _isDraggingHandle = false;
+                Viewport.ReleaseMouseCapture();
+            }
         }
 
         private void Viewport_MouseLeave(object sender, MouseEventArgs e) => HoverPositionChanged?.Invoke(null);
@@ -583,7 +587,8 @@ namespace CameraCalibrationStudio.Controls
         {
             if (Document == null) return;
 
-            // 1. handle hit (only for the currently selected shape)
+            // 1. handle hit (only for the currently selected shape). Dragging a corner/vertex
+            //    handle is the normal way to edit an existing region's geometry.
             if (Selected != null)
             {
                 int handle = HitTestHandle(Selected, pos);
@@ -592,18 +597,31 @@ namespace CameraCalibrationStudio.Controls
                     History?.Snapshot(Document.Objects);
                     _isDraggingHandle = true;
                     _dragHandleIndex = handle;
+                    // Capture so the edit still ends correctly if the button is released outside
+                    // the viewport — without this the shape stayed stuck to the cursor.
+                    Viewport.CaptureMouse();
                     return;
                 }
             }
 
-            // 2. shape body hit (topmost first)
+            // 2. shape body hit (topmost first). A plain click only SELECTS the region — it must
+            //    not grab it, otherwise simply clicking a region drags it out of calibration.
+            //    Once selected its point handles appear and can be dragged to edit it. Moving the
+            //    whole region is still possible, but requires holding Ctrl so it is deliberate.
             var hit = Document.Objects.LastOrDefault(o => o.IsVisible && HitTestBody(o, pos));
             if (hit != null)
             {
+                bool alreadySelected = ReferenceEquals(hit, Selected);
                 Select(hit);
-                History?.Snapshot(Document.Objects);
-                _isMovingShape = true;
-                _moveLastPoint = pos;
+
+                bool moveRequested = (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control;
+                if (moveRequested && alreadySelected)
+                {
+                    History?.Snapshot(Document.Objects);
+                    _isMovingShape = true;
+                    _moveLastPoint = pos;
+                    Viewport.CaptureMouse();
+                }
                 return;
             }
 
