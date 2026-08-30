@@ -71,9 +71,7 @@ namespace CameraCalibrationStudio.Views
             ObjectList.ItemsSource = _objectListView;
             FilterGallery.ItemsSource = _filters;
 
-            UpdateToolHint();
             UpdateActiveClassDisplay();
-            RefreshRecentClassChips();
             RefreshClassFilterCombo();
             UpdateStatusBar();
         }
@@ -134,36 +132,6 @@ namespace CameraCalibrationStudio.Views
             }
         }
 
-        private void RefreshRecentClassChips()
-        {
-            RecentClassesPanel.Children.Clear();
-            var recent = _classLibrary
-                .Where(c => c.LastUsedUtc != null)
-                .OrderByDescending(c => c.LastUsedUtc)
-                .Take(4);
-
-            foreach (var c in recent)
-            {
-                var chip = new Border
-                {
-                    Background = (Brush)FindResource("TileBackground"),
-                    CornerRadius = new CornerRadius(10),
-                    Padding = new Thickness(8, 3, 8, 3),
-                    Margin = new Thickness(0, 0, 4, 0),
-                    Cursor = System.Windows.Input.Cursors.Hand,
-                    ToolTip = c.Name
-                };
-                var stack = new StackPanel { Orientation = Orientation.Horizontal };
-                stack.Children.Add(new Ellipse { Width = 7, Height = 7, Fill = c.SwatchBrush, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 5, 0) });
-                stack.Children.Add(new TextBlock { Text = Truncate(c.Name, 14), FontSize = 10.5, Foreground = (Brush)FindResource("TextPrimary") });
-                chip.Child = stack;
-                chip.MouseLeftButtonDown += (_, _) => SetActiveClass(c);
-                RecentClassesPanel.Children.Add(chip);
-            }
-        }
-
-        private static string Truncate(string s, int max) => s.Length <= max ? s : s[..max] + "…";
-
         private void RefreshClassFilterCombo()
         {
             var current = _classFilterId;
@@ -190,7 +158,6 @@ namespace CameraCalibrationStudio.Views
             var dlg = new ClassPickerDialog(_classLibrary, "Set Active Class") { Owner = Window.GetWindow(this) };
             var ok = dlg.ShowDialog();
             ClassLibraryStore.Save(_classLibrary); // persists any class created inline, even if the dialog result is used below
-            RefreshRecentClassChips();
             RefreshClassFilterCombo();
 
             if (ok != true) return;
@@ -223,7 +190,6 @@ namespace CameraCalibrationStudio.Views
 
         private void RefreshRecentChipsAndFilterAndCanvas()
         {
-            RefreshRecentClassChips();
             RefreshClassFilterCombo();
             UpdateActiveClassDisplay();
             Canvas.RedrawAll();
@@ -237,7 +203,6 @@ namespace CameraCalibrationStudio.Views
             var dlg = new ClassPickerDialog(_classLibrary, "Change Class") { Owner = Window.GetWindow(this) };
             var ok = dlg.ShowDialog();
             ClassLibraryStore.Save(_classLibrary);
-            RefreshRecentClassChips();
             RefreshClassFilterCombo();
             if (ok != true || dlg.Outcome != ClassPickerOutcome.Selected || dlg.SelectedClass == null) return;
 
@@ -492,7 +457,6 @@ namespace CameraCalibrationStudio.Views
                 _ when sender == ToolPan => ToolMode.Pan,
                 _ => ToolMode.Select
             };
-            UpdateToolHint();
             Canvas.RedrawAll();
         }
 
@@ -555,20 +519,6 @@ namespace CameraCalibrationStudio.Views
             ToolLine.IsChecked = false;
             ToolPan.IsChecked = false;
             Canvas.Tool = ToolMode.Select;
-            UpdateToolHint();
-        }
-
-        private void UpdateToolHint()
-        {
-            ToolHintText.Text = Canvas.Tool switch
-            {
-                ToolMode.Rectangle => "Rectangle: Click and drag to create a region.",
-                ToolMode.Square => "Square: Click and drag — width and height stay equal automatically.",
-                ToolMode.Polygon => "Polygon: Click to add points • Enter or double-click to finish • Esc to cancel • Backspace removes the last point.",
-                ToolMode.Line => "Line: Click and drag from the start point to the end point.",
-                ToolMode.Pan => "Pan: Click and drag to move around the image. Mouse wheel zooms.",
-                _ => "Click a region to select it • drag its point handles to edit • double-click a polygon edge to add a point • Ctrl+drag inside it to move it."
-            };
         }
 
         // =====================================================================
@@ -593,7 +543,6 @@ namespace CameraCalibrationStudio.Views
             var picker = new ClassPickerDialog(_classLibrary) { Owner = Window.GetWindow(this) };
             var pickerResult = picker.ShowDialog();
             ClassLibraryStore.Save(_classLibrary);
-            RefreshRecentClassChips();
             RefreshClassFilterCombo();
 
             if (pickerResult == true && picker.Outcome == ClassPickerOutcome.Selected && picker.SelectedClass != null)
@@ -646,7 +595,6 @@ namespace CameraCalibrationStudio.Views
         private void FinishShapeCreation()
         {
             UpdateObjectSwatches();
-            RefreshRecentClassChips();
             RefreshClassFilterCombo();
 
             if (ContinuousDrawRadio.IsChecked != true)

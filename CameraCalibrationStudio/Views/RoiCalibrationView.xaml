@@ -78,8 +78,6 @@
                             </Grid>
                         </Button>
 
-                        <StackPanel x:Name="RecentClassesPanel" Orientation="Horizontal" Margin="0,0,0,6"/>
-
                         <Grid Margin="0,0,0,8">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
@@ -90,9 +88,6 @@
                             <RadioButton x:Name="ContinuousDrawRadio" Grid.Column="1" Content="Continuous" GroupName="DrawMode"
                                          Style="{StaticResource ToolRadioButton}" Margin="3,0,0,0"/>
                         </Grid>
-
-                        <TextBlock x:Name="ToolHintText" Text="Click an existing region to select, move, resize or rename it."
-                                   Foreground="{StaticResource TextSecondary}" FontSize="11" TextWrapping="Wrap" Margin="0,8,0,4"/>
 
                         <Grid Margin="0,4,0,0">
                             <Grid.ColumnDefinitions>
@@ -249,17 +244,21 @@
                                    MouseLeftButtonDown="FloatingToolsGrip_MouseLeftButtonDown"/>
                         <Border Width="1" Background="#4A4A57" Margin="0,4,5,4"/>
 
-                        <RadioButton x:Name="ToolRectangle" Content="▭" GroupName="Tools" ToolTip="Rectangle"
+                        <RadioButton x:Name="ToolRectangle" Content="▭" GroupName="Tools" ToolTip="Rectangle — click and drag to create a region"
                                      Style="{StaticResource FloatingToolButton}" Checked="Tool_Checked"/>
-                        <RadioButton x:Name="ToolSquare" Content="□" GroupName="Tools" ToolTip="Square"
+                        <RadioButton x:Name="ToolSquare" Content="□" GroupName="Tools" ToolTip="Square — click and drag; width and height stay equal"
                                      Style="{StaticResource FloatingToolButton}" Checked="Tool_Checked"/>
-                        <RadioButton x:Name="ToolPolygon" Content="⬠" GroupName="Tools" ToolTip="Polygon"
+                        <RadioButton x:Name="ToolPolygon" Content="⬠" GroupName="Tools" ToolTip="Polygon — click to add points, Enter or double-click to finish, Backspace removes the last point, Esc cancels"
                                      Style="{StaticResource FloatingToolButton}" Checked="Tool_Checked"/>
-                        <RadioButton x:Name="ToolLine" Content="╱" GroupName="Tools" ToolTip="Line"
+                        <RadioButton x:Name="ToolLine" Content="╱" GroupName="Tools" ToolTip="Line — click and drag from the start point to the end point"
                                      Style="{StaticResource FloatingToolButton}" Checked="Tool_Checked"/>
                         <Border Width="1" Background="#4A4A57" Margin="5,4"/>
-                        <RadioButton x:Name="ToolPan" Content="✋" GroupName="Tools" ToolTip="Pan (or hold Space)"
+                        <RadioButton x:Name="ToolPan" Content="✋" GroupName="Tools" ToolTip="Pan — drag to move around the image, or hold Space with any tool. Mouse wheel zooms"
                                      Style="{StaticResource FloatingToolButton}" Checked="Tool_Checked"/>
+                        <Border Width="1" Background="#4A4A57" Margin="5,4"/>
+                        <TextBlock Text="?" Foreground="{StaticResource TextSecondary}" FontSize="13" FontWeight="SemiBold"
+                                   VerticalAlignment="Center" Margin="5,0,6,0" Cursor="Help"
+                                   ToolTip="Editing an existing region:&#10;  • Click it to select — its point handles appear&#10;  • Drag a handle to reshape it&#10;  • Double-click a polygon edge to add a point&#10;  • Ctrl+drag inside it to move the whole region&#10;  • Delete removes the selected region"/>
                     </StackPanel>
                 </Border>
 
