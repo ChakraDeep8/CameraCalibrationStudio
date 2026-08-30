@@ -11,15 +11,26 @@
             MouseLeave="Viewport_MouseLeave"
             PreviewKeyDown="Viewport_PreviewKeyDown"
             SizeChanged="Viewport_SizeChanged">
-        <Grid x:Name="TransformRoot" HorizontalAlignment="Left" VerticalAlignment="Top">
-            <Grid.RenderTransform>
-                <TransformGroup>
-                    <ScaleTransform x:Name="Scale" ScaleX="1" ScaleY="1"/>
-                    <TranslateTransform x:Name="Translate" X="0" Y="0"/>
-                </TransformGroup>
-            </Grid.RenderTransform>
-            <Image x:Name="BackgroundImage" Stretch="Fill" SnapsToDevicePixels="True"/>
-            <Canvas x:Name="ShapesCanvas" Background="Transparent"/>
-        </Grid>
+        <!-- TransformRoot is sized to the image's FULL pixel dimensions and scaled down by its
+             RenderTransform. It must be hosted in a Canvas, not placed directly in the Border:
+             a Border arranges its child within its own (smaller) content rect, and WPF then
+             applies a LAYOUT CLIP to any child whose explicit size exceeds that rect. That clip
+             is applied in pre-RenderTransform coordinates, so zooming out cannot recover the
+             clipped region — the bottom/right of a large image was being discarded before the
+             scale transform ever ran, at every zoom level. A Canvas measures its children with
+             infinite available size and arranges them at their desired size, so no layout clip
+             is ever applied. The Border's ClipToBounds still clips the final rendered output. -->
+        <Canvas>
+            <Grid x:Name="TransformRoot" HorizontalAlignment="Left" VerticalAlignment="Top">
+                <Grid.RenderTransform>
+                    <TransformGroup>
+                        <ScaleTransform x:Name="Scale" ScaleX="1" ScaleY="1"/>
+                        <TranslateTransform x:Name="Translate" X="0" Y="0"/>
+                    </TransformGroup>
+                </Grid.RenderTransform>
+                <Image x:Name="BackgroundImage" Stretch="Fill" SnapsToDevicePixels="True"/>
+                <Canvas x:Name="ShapesCanvas" Background="Transparent"/>
+            </Grid>
+        </Canvas>
     </Border>
 </UserControl>
