@@ -16,6 +16,7 @@
                         <Button Content="Grab Frame from RTSP…" Click="GrabRtsp_Click" Style="{StaticResource ToolButton}"/>
                         <Button Content="Grab Frame from Video…" Click="GrabVideo_Click" Style="{StaticResource ToolButton}"/>
                         <Button Content="Open Calibration" Click="OpenCalibration_Click" Style="{StaticResource ToolButton}"/>
+                        <Button Content="Save Frame…" ToolTip="Save the current frame as an image" Click="SaveFrame_Click" Style="{StaticResource ToolButton}"/>
                         <Button Content="Save Calibration" ToolTip="Ctrl+S" Click="SaveCalibration_Click" Style="{StaticResource PrimaryButton}"/>
                     </StackPanel>
                 </Border>

@@ -555,7 +555,31 @@ namespace CameraCalibrationStudio.Controls
 
         private void FinishPolygon()
         {
-            _pendingNewShape = new PolygonObject { Points = _polygonPoints.ToList() };
+            var points = _polygonPoints.ToList();
+
+            // Finishing with a double-click delivers TWO MouseLeftButtonDown events: the first
+            // (ClickCount 1) adds a point, the second (ClickCount 2) lands here. Every polygon
+            // closed that way therefore ended up with a duplicate vertex sitting on top of its
+            // last one. Drop a trailing point that is effectively coincident with the previous
+            // one — a deliberately placed vertex that far apart is kept, so a genuine final
+            // click still counts.
+            if (points.Count >= 2)
+            {
+                double tolerance = 5 / Math.Max(Scale.ScaleX, 0.001);
+                if ((points[^1] - points[^2]).Length <= tolerance)
+                    points.RemoveAt(points.Count - 1);
+            }
+
+            if (points.Count < 3)
+            {
+                // Not a polygon any more once the duplicate is gone — discard rather than
+                // committing a degenerate shape.
+                _polygonPoints.Clear();
+                RedrawAll();
+                return;
+            }
+
+            _pendingNewShape = new PolygonObject { Points = points };
             _polygonPoints.Clear();
             RedrawAll();
             RequestNaming?.Invoke(_pendingNewShape);

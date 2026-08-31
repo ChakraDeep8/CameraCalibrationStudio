@@ -280,6 +280,113 @@ namespace CameraCalibrationStudio.Views
                 LoadImageMat(dlg.CapturedFrame, dlg.SuggestedName, "", "");
         }
 
+        // =====================================================================
+        // Save the canvas frame
+        // =====================================================================
+
+        private void SaveFrame_Click(object sender, RoutedEventArgs e)
+        {
+            if (_originalMat == null || !_document.HasImage)
+            {
+                MessageBox.Show(Window.GetWindow(this), "Open an image or grab a frame first.",
+                    "Save Frame", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            const string plain = "Frame only (the calibration image)";
+            const string annotated = "Frame with the drawn regions burnt in";
+
+            var choice = SimpleChoiceDialog.Show(Window.GetWindow(this), "What should be saved?",
+                new[] { plain, annotated }, plain);
+            if (choice == null) return;
+
+            var suggested = Path.GetFileNameWithoutExtension(_document.ImageFileName);
+            if (string.IsNullOrWhiteSpace(suggested)) suggested = "frame";
+            if (choice == annotated) suggested += "_annotated";
+
+            var dlg = new SaveFileDialog
+            {
+                Filter = "PNG image|*.png|JPEG image|*.jpg",
+                FileName = suggested + ".png"
+            };
+            if (dlg.ShowDialog() != true) return;
+
+            try
+            {
+                // Rendered from the FULL-resolution original, not the preview: PreviewProcessor
+                // caps its cached copy at 1600px for responsiveness, so saving from it would
+                // silently downscale a larger camera frame.
+                using var rendered = ImageOpsService.ApplyAdjustments(_originalMat, CurrentSettings());
+
+                if (choice == annotated)
+                {
+                    using var withOverlays = RenderOverlays(rendered);
+                    Cv2.ImWrite(dlg.FileName, withOverlays);
+                }
+                else
+                {
+                    Cv2.ImWrite(dlg.FileName, rendered);
+                }
+
+                StatusText.Text = $"Saved frame to {Path.GetFileName(dlg.FileName)}";
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(Window.GetWindow(this), $"Could not save the frame.\n\n{ex.Message}",
+                    "Save Frame", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+
+        /// <summary>
+        /// Draws the calibration objects onto a copy of <paramref name="source"/> in its own
+        /// pixel space. Geometry is already stored in original-image coordinates, so it maps
+        /// across directly with no zoom/pan compensation.
+        /// </summary>
+        private Mat RenderOverlays(Mat source)
+        {
+            var canvas = source.Clone();
+            int thickness = Math.Max(1, (int)Math.Round(source.Width / 640.0));
+            double fontScale = Math.Max(0.4, source.Width / 1600.0);
+
+            foreach (var obj in _document.Objects)
+            {
+                if (!obj.IsVisible) continue;
+
+                var color = GetClassColor(obj) is { } c
+                    ? new Scalar(c.B, c.G, c.R)   // OpenCV is BGR
+                    : new Scalar(230, 230, 230);
+
+                switch (obj)
+                {
+                    case RectangleObject r:
+                        Cv2.Rectangle(canvas,
+                            new OpenCvSharp.Point((int)Math.Min(r.X1, r.X2), (int)Math.Min(r.Y1, r.Y2)),
+                            new OpenCvSharp.Point((int)Math.Max(r.X1, r.X2), (int)Math.Max(r.Y1, r.Y2)),
+                            color, thickness);
+                        break;
+
+                    case PolygonObject poly when poly.Points.Count >= 2:
+                        var pts = poly.Points.Select(pt => new OpenCvSharp.Point((int)pt.X, (int)pt.Y)).ToArray();
+                        Cv2.Polylines(canvas, new[] { pts }, isClosed: true, color, thickness);
+                        break;
+
+                    case LineObject l:
+                        Cv2.Line(canvas,
+                            new OpenCvSharp.Point((int)l.Start.X, (int)l.Start.Y),
+                            new OpenCvSharp.Point((int)l.End.X, (int)l.End.Y),
+                            color, thickness);
+                        break;
+                }
+
+                var bounds = obj.GetBounds();
+                Cv2.PutText(canvas, obj.Name,
+                    new OpenCvSharp.Point((int)bounds.Left, Math.Max(12, (int)bounds.Top - 6)),
+                    HersheyFonts.HersheySimplex, fontScale, color, thickness);
+            }
+
+            return canvas;
+        }
+
         /// <summary>Common entry point for both "Open Image" and "Grab Frame from RTSP" — takes ownership of mat.</summary>
         private void LoadImageMat(Mat mat, string displayName, string path, string suggestedDeviceId)
         {
