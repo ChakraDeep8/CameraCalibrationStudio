@@ -512,6 +512,14 @@ namespace CameraCalibrationStudio.Views
             var settings = CurrentSettings();
             _document.Adjustments = settings;
             Canvas.SetPreviewImage(_preview.Render(settings));
+
+            // Adjustments are saved as part of the calibration, so the JSON panel has to track
+            // them live the way it already tracks regions. Previously only the preview image was
+            // updated here, leaving the adjustments block in the JSON stale until some unrelated
+            // action happened to trigger a refresh. Marking the document dirty is part of the
+            // same point: a moved slider is an unsaved change.
+            _dirty = true;
+            RefreshAll();
         }
 
         private void ResetAdjustmentControls()
