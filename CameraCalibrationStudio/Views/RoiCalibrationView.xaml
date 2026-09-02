@@ -259,7 +259,7 @@
                         <Border Width="1" Background="#4A4A57" Margin="5,4"/>
                         <TextBlock Text="?" Foreground="{StaticResource TextSecondary}" FontSize="13" FontWeight="SemiBold"
                                    VerticalAlignment="Center" Margin="5,0,6,0" Cursor="Help"
-                                   ToolTip="Editing an existing region:&#10;  • Click it to select — its point handles appear&#10;  • Drag a handle to reshape it&#10;  • Double-click a polygon edge to add a point&#10;  • Ctrl+drag inside it to move the whole region&#10;  • Delete removes the selected region"/>
+                                   ToolTip="Editing an existing region:&#10;  • Click it to select — its point handles appear&#10;  • Drag a handle to reshape it&#10;  • Double-click a polygon edge to add a point&#10;  • Ctrl+drag inside it to move the whole region&#10;  • Ctrl+D duplicates the selected region&#10;  • Delete removes the selected region&#10;&#10;Right-click the canvas to grab the palm, right-click again to go back."/>
                     </StackPanel>
                 </Border>
 

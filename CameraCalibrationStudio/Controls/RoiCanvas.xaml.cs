@@ -42,6 +42,9 @@ namespace CameraCalibrationStudio.Controls
         /// <summary>Image-pixel coordinate under the cursor, or null when the cursor leaves the image.</summary>
         public event Action<Point?>? HoverPositionChanged;
         public event Action<double>? ZoomChanged;
+        /// <summary>Raised when the canvas itself wants a different tool active (right-click
+        /// toggles the palm). The host owns the toolbar, so it applies the change.</summary>
+        public event Action<ToolMode>? ToolChangeRequested;
 
         public ToolMode Tool { get; set; } = ToolMode.Select;
         public CalibrationObjectBase? Selected { get; private set; }
@@ -321,7 +324,14 @@ namespace CameraCalibrationStudio.Controls
                 _isDraggingHandle = false;
                 Viewport.ReleaseMouseCapture();
                 e.Handled = true;
+                return;
             }
+
+            // Otherwise right-click grabs the palm, so panning is always one click away without
+            // going to the toolbar. Right-clicking again hands the canvas back to Select, so the
+            // same button gets you out — otherwise the palm would be a one-way trip.
+            ToolChangeRequested?.Invoke(Tool == ToolMode.Pan ? ToolMode.Select : ToolMode.Pan);
+            e.Handled = true;
         }
 
         private void Viewport_MouseMove(object sender, MouseEventArgs e)

@@ -63,6 +63,7 @@ namespace CameraCalibrationStudio.Views
             Canvas.Changed += OnCanvasChanged;
             Canvas.SelectionChanged += OnCanvasSelectionChanged;
             Canvas.RequestNaming += OnRequestNaming;
+            Canvas.ToolChangeRequested += OnCanvasToolChangeRequested;
             Canvas.HoverPositionChanged += p => { _lastHover = p; UpdateStatusBar(); };
             Canvas.ZoomChanged += _ => UpdateStatusBar();
 
@@ -626,6 +627,27 @@ namespace CameraCalibrationStudio.Views
             FloatingToolsGrip.MouseLeftButtonUp -= FloatingToolsGrip_MouseLeftButtonUp;
         }
 
+        /// <summary>
+        /// Applies a tool the canvas asked for (right-click toggles the palm) by checking the
+        /// matching toolbar button, so the floating toolbar stays in sync rather than the canvas
+        /// and the toolbar disagreeing about which tool is active.
+        /// </summary>
+        private void OnCanvasToolChangeRequested(ToolMode tool)
+        {
+            if (tool == ToolMode.Select) { ResetToolToSelect(); return; }
+
+            var button = tool switch
+            {
+                ToolMode.Rectangle => ToolRectangle,
+                ToolMode.Square => ToolSquare,
+                ToolMode.Polygon => ToolPolygon,
+                ToolMode.Line => ToolLine,
+                ToolMode.Pan => ToolPan,
+                _ => null
+            };
+            if (button != null) button.IsChecked = true; // fires Tool_Checked, which sets Canvas.Tool
+        }
+
         private void ResetToolToSelect()
         {
             ToolRectangle.IsChecked = false;
@@ -857,9 +879,19 @@ namespace CameraCalibrationStudio.Views
         private void DuplicateObjectGlyph_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
             if (sender is not FrameworkElement fe || fe.DataContext is not CalibrationObjectBase obj) return;
+            DuplicateObject(obj);
+            e.Handled = true;
+        }
 
+        /// <summary>
+        /// Copies a region, offset slightly so the duplicate is visible rather than sitting
+        /// exactly on top of the original, and leaves the copy selected so it can be dragged
+        /// straight into place. Shared by the list glyph and the Ctrl+D shortcut.
+        /// </summary>
+        private void DuplicateObject(CalibrationObjectBase obj)
+        {
             var clone = obj.Clone();
-            clone.Translate(24, 24); // offset so the copy doesn't sit exactly on top of the original
+            clone.Translate(24, 24);
             clone.Name = NextAvailableName(obj.Name + " copy");
 
             _history.Snapshot(_document.Objects);
@@ -869,7 +901,6 @@ namespace CameraCalibrationStudio.Views
             Canvas.Select(clone);
             _dirty = true;
             RefreshAll();
-            e.Handled = true;
         }
 
         private string NextAvailableName(string baseName)
@@ -1154,6 +1185,12 @@ namespace CameraCalibrationStudio.Views
             else if (ctrl && e.Key == Key.S) { SaveCalibration(); e.Handled = true; }
             else if (ctrl && e.Key == Key.Z) { DoUndo(); e.Handled = true; }
             else if (ctrl && e.Key == Key.Y) { DoRedo(); e.Handled = true; }
+            else if (ctrl && e.Key == Key.D)
+            {
+                // Duplicate whatever is selected on the canvas.
+                if (Canvas.Selected != null) DuplicateObject(Canvas.Selected);
+                e.Handled = true; // swallow it either way, so Ctrl+D never falls through to WPF
+            }
             else if (!typing && e.Key == Key.Delete) { Canvas.DeleteSelected(); e.Handled = true; }
             else if (!typing && e.Key == Key.F) { Canvas.FitToWindow(); e.Handled = true; }
             else if (!typing && e.Key == Key.D1) { Canvas.SetZoomPercent(100); e.Handled = true; }
