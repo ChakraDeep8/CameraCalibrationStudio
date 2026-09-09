@@ -4,9 +4,9 @@
 
 **Draw the zones. Get the JSON. Ship the pipeline.**
 
-A Windows desktop tool for turning a camera frame into production-ready ROI/zone
-calibration — with pixel-exact coordinates, live JSON, and frames pulled straight
-from your cameras.
+A Windows desktop tool for turning camera frames into production-ready ROI/zone
+calibration and labelled training data — pixel-exact coordinates, live JSON, and
+frames pulled straight from your cameras.
 
 [![Release](https://img.shields.io/github/v/release/ChakraDeep8/CameraCalibrationStudio?style=for-the-badge&color=4C8DFF&labelColor=1C1C22)](https://github.com/ChakraDeep8/CameraCalibrationStudio/releases/latest)
 [![Downloads](https://img.shields.io/github/downloads/ChakraDeep8/CameraCalibrationStudio/total?style=for-the-badge&color=4C8DFF&labelColor=1C1C22)](https://github.com/ChakraDeep8/CameraCalibrationStudio/releases)
@@ -15,7 +15,7 @@ from your cameras.
 [![OpenCV](https://img.shields.io/badge/OpenCvSharp-4.10-5C3EE8?style=for-the-badge&labelColor=1C1C22)](https://github.com/shimat/opencvsharp)
 
 [**⬇️ Download**](https://github.com/ChakraDeep8/CameraCalibrationStudio/releases/latest) ·
-[**What's New**](#-whats-new-in-v120) ·
+[**What's New**](#-whats-new-in-v130) ·
 [**Quick Start**](#-quick-start) ·
 [**Gestures**](#-canvas-gestures)
 
@@ -23,7 +23,51 @@ from your cameras.
 
 ---
 
-## ✨ What's New in v1.2.0
+## ✨ What's New in v1.3.0
+
+> Frames in, labelled dataset out — plus the click that finally always registers.
+
+### 🗂️ Data Builder — a whole new workspace
+
+Draw a box around each subject in a frame, label it (Staff, Customer, Security…), press
+**Add Data**. Every region is cropped out of the **original full-resolution frame** and written
+into a folder named after its label:
+
+```
+<output>/Staff/frame_01_143502.jpg
+<output>/Customer/frame_02_143502.jpg
+```
+
+Regions stay on screen after Add Data with a ✓ against the ones already written, so a second
+click can't duplicate them. **Save Database** closes the batch and appends a `labels.csv`
+tying every crop back to its source frame and exact pixel rectangle — so a mislabelled crop
+is always traceable.
+
+It shares the class library with ROI Calibration, and deliberately has **no** adjustment or
+filter controls: a training set wants the frame as the camera saw it.
+
+### 🔗 One click from Image Editor to ROI Calibration
+
+Clean a frame up in the editor, hit **Use in ROI Calibration**, and it opens there ready to
+draw on — adjustments and filter baked into the pixels, full resolution, no save-and-reopen.
+
+### 🐛 Clicks over an existing region no longer vanish
+
+Placing polygon points on top of an existing line or ROI often did nothing. The shape overlay
+is rebuilt on every mouse-move while drawing, so a mouse-down could be routed to an element
+that had just been detached from the tree and never reach the canvas. Measured: **6 of 6**
+clicks now register where previously the polygon wasn't created at all.
+
+### ✂️ Also
+
+- **Ctrl+D** duplicates the selected region · **right-click** grabs the palm
+- Brightness/contrast and the filter now update the JSON panel **live**, like regions do
+- **Lens Calibration has been removed** — the app is ROI Calibration, Image Editor and Data Builder
+
+---
+
+<details>
+<summary><b>Previously, in v1.2.0</b></summary>
 
 > The release that stopped making you hunt for a good frame — and stopped the canvas eating your image.
 
@@ -84,6 +128,8 @@ it like any other handle.
   with a sticky filter header.
 - Draw/Class panel decluttered — class chips and the always-on instruction caption are gone.
 
+</details>
+
 ---
 
 ## 🗺️ The workflow
@@ -93,7 +139,7 @@ flowchart LR
     A["📷 Frame<br/>image · RTSP · video"] --> B["✏️ Draw<br/>rect · square · polygon · line"]
     B --> C["🏷️ Classify<br/>reusable class library"]
     C --> D["🎚️ Tune<br/>preview only, never coordinates"]
-    D --> E["📄 Export<br/>native JSON or zones schema"]
+    D --> E["📄 Export<br/>zone JSON · or labelled crops"]
 
     style A fill:#232329,stroke:#4C8DFF,color:#F1F1F4
     style B fill:#232329,stroke:#4C8DFF,color:#F1F1F4
@@ -125,15 +171,18 @@ current adjustments across a folder.
 *Fix the frame first*
 
 Rotate, flip, crop, resize. Real-time non-destructive brightness/contrast/sharpness plus a
-one-at-a-time filter gallery sharing the same pipeline as ROI Calibration.
+one-at-a-time filter gallery. **Use in ROI Calibration** sends the cleaned-up frame straight
+across — no save-and-reopen.
 
 </td>
 <td width="33%" valign="top">
 
-### 🔬 Lens Calibration
-*Undo the optics*
+### 🗂️ Data Builder
+*Turn frames into a training set*
 
-Classic OpenCV chessboard intrinsics and distortion calibration via `Cv2.CalibrateCamera`.
+Draw a box around each subject, label it, press **Add Data** — every region is written out as
+its own image into a folder named after its label. **Save Database** closes the batch with a
+`labels.csv` index.
 
 </td>
 </tr>
@@ -171,6 +220,8 @@ testing hands back image coordinates directly. **Screen coordinates never leak i
 | **Drag** a handle | Reshape it |
 | **Double-click** a polygon edge | Insert a new vertex there |
 | `Ctrl` + **drag** inside a region | Move the whole region |
+| `Ctrl`+`D` | Duplicate the selected region |
+| **Right-click** empty canvas | Grab the palm (again to go back) |
 | **Right-click** mid-drag | Fix it in place immediately |
 | `Delete` | Remove the selected region |
 | **Wheel** | Zoom · **Space**+drag or Pan tool — pan |
