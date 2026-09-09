@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
@@ -32,6 +32,14 @@ namespace CameraCalibrationStudio.Models.Roi
 
         private bool _isVisible = true;
         public bool IsVisible { get => _isVisible; set { _isVisible = value; Raise(); } }
+
+        /// <summary>
+        /// Display-only, set by Data Builder once this region has been written out as a crop, so
+        /// the region can stay on the image after Add Data without a second click exporting it
+        /// again. Not persisted, and ignored by ROI Calibration.
+        /// </summary>
+        private bool _isExported;
+        public bool IsExported { get => _isExported; set { _isExported = value; Raise(); } }
 
         /// <summary>Display-only, kept in sync by the host from the class library — not persisted (JSON export builds its own fields).</summary>
         private Brush _swatchBrush = Brushes.Gray;

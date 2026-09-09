@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -15,6 +15,15 @@ namespace CameraCalibrationStudio.Services
         public string? SavedPath { get; init; }
         public string? Skipped { get; init; }
         public bool Saved => SavedPath != null;
+
+        /// <summary>Frame this crop was taken from, and where in it — recorded so a batch can be
+        /// written out as a manifest that ties every crop back to its source.</summary>
+        public string SourceImage { get; init; } = "";
+        public int X { get; init; }
+        public int Y { get; init; }
+        public int Width { get; init; }
+        public int Height { get; init; }
+        public DateTime SavedUtc { get; init; }
     }
 
     /// <summary>
@@ -97,7 +106,13 @@ namespace CameraCalibrationStudio.Services
                 {
                     RegionName = region.Name,
                     ClassName = className,
-                    SavedPath = file
+                    SavedPath = file,
+                    SourceImage = sourceImageName,
+                    X = rect.X,
+                    Y = rect.Y,
+                    Width = rect.Width,
+                    Height = rect.Height,
+                    SavedUtc = DateTime.UtcNow
                 });
             }
 

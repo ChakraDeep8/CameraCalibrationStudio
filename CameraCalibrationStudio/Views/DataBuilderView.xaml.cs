@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
@@ -37,9 +37,12 @@ namespace CameraCalibrationStudio.Views
         private readonly ObservableCollection<CalibrationClass> _classLibrary;
         private CalibrationClass? _activeClass;
 
-        /// <summary>Running per-label totals for this session, shown in the sidebar.</summary>
+        /// <summary>Running per-label totals for this batch, shown in the sidebar.</summary>
         private readonly ObservableCollection<ClassCount> _sessionCounts = new();
         private int _sessionTotal;
+
+        /// <summary>Every crop written since the last Save Database, for the batch manifest.</summary>
+        private readonly List<CropResult> _batchCrops = new();
 
         private bool _syncingSelection;
 
@@ -202,10 +205,20 @@ namespace CameraCalibrationStudio.Views
                 return;
             }
 
-            var regions = _document.Objects.Where(o => o.IsVisible).ToList();
-            if (regions.Count == 0)
+            var drawn = _document.Objects.Where(o => o.IsVisible).ToList();
+            if (drawn.Count == 0)
             {
                 UpdateStatus("Draw at least one region first.", isWarning: true);
+                return;
+            }
+
+            // Regions stay on the image after Add Data so the frame keeps showing what has been
+            // labelled. That makes a second click a duplicate-export risk, so anything already
+            // written out is skipped rather than saved twice.
+            var regions = drawn.Where(o => !o.IsExported).ToList();
+            if (regions.Count == 0)
+            {
+                UpdateStatus($"All {drawn.Count} region(s) on this frame are already saved. Draw more, or load the next frame.", isWarning: true);
                 return;
             }
 
@@ -228,6 +241,13 @@ namespace CameraCalibrationStudio.Views
             foreach (var group in saved.GroupBy(r => r.ClassName))
                 BumpCount(group.Key, group.Count());
             _sessionTotal += saved.Count;
+            _batchCrops.AddRange(saved);
+
+            // Tick the regions that were written; they stay on the canvas.
+            var savedNames = saved.Select(r => r.RegionName).ToHashSet(StringComparer.Ordinal);
+            foreach (var region in regions.Where(r => savedNames.Contains(r.Name)))
+                region.IsExported = true;
+            Canvas.RedrawAll();
 
             var skipped = results.Where(r => !r.Saved).ToList();
             var message = saved.Count == 1 ? "Saved 1 crop" : $"Saved {saved.Count} crops";
@@ -237,16 +257,66 @@ namespace CameraCalibrationStudio.Views
 
             UpdateStatus(message);
             RefreshSessionTotal();
+        }
 
-            // Clearing by default is what makes this quick to repeat across frames, and it stops
-            // a second click on Add Data from writing the same crops twice.
-            if (ClearAfterAddCheck.IsChecked == true && saved.Count > 0)
+        // =====================================================================
+        // Save Database — closes out the batch
+        // =====================================================================
+
+        private void SaveDatabase_Click(object sender, RoutedEventArgs e) => SaveDatabase();
+
+        /// <summary>
+        /// Finishes the batch: indexes everything collected since the last save into labels.csv
+        /// next to the class folders, then resets so the next batch starts clean. The crops
+        /// themselves are already on disk — this is what makes the set self-describing, tying
+        /// each one back to the frame and pixel rectangle it came from.
+        /// </summary>
+        private void SaveDatabase()
+        {
+            if (_batchCrops.Count == 0)
             {
-                _history.Snapshot(_document.Objects);
-                _document.Objects.Clear();
-                Canvas.Select(null);
-                Canvas.RedrawAll();
+                UpdateStatus("Nothing to save yet — press Add Data on at least one frame first.", isWarning: true);
+                return;
             }
+
+            var folder = OutputFolderBox.Text.Trim();
+            if (string.IsNullOrWhiteSpace(folder))
+            {
+                UpdateStatus("Set an output folder before saving the database.", isWarning: true);
+                OutputFolderBox.Focus();
+                return;
+            }
+
+            string manifest;
+            try
+            {
+                manifest = DatasetManifestService.AppendBatch(folder, _batchCrops);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(Window.GetWindow(this), $"Could not write the dataset index.\n\n{ex.Message}",
+                    "Save Database", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            int crops = _batchCrops.Count;
+            int classes = _batchCrops.Select(c => c.ClassName).Distinct(StringComparer.OrdinalIgnoreCase).Count();
+
+            MessageBox.Show(Window.GetWindow(this),
+                $"Batch saved.\n\n{crops} crop(s) across {classes} class(es) indexed in\n{Path.GetFileName(manifest)}.\n\nStarting a new batch.",
+                "Save Database", MessageBoxButton.OK, MessageBoxImage.Information);
+
+            // Start the next batch clean: the regions on screen belong to the batch just closed.
+            _batchCrops.Clear();
+            _sessionCounts.Clear();
+            _sessionTotal = 0;
+            _document.Objects.Clear();
+            _history.Clear();
+            Canvas.Select(null);
+            Canvas.RedrawAll();
+
+            RefreshSessionTotal();
+            UpdateStatus($"Batch closed — {crops} crop(s) indexed in {manifest}. Ready for the next batch.");
         }
 
         private void BumpCount(string className, int delta)
@@ -515,6 +585,7 @@ namespace CameraCalibrationStudio.Views
             bool typing = Keyboard.FocusedElement is TextBox;
 
             if (ctrl && e.Key == Key.Enter) { AddData(); e.Handled = true; }
+            else if (ctrl && e.Key == Key.S) { SaveDatabase(); e.Handled = true; }
             else if (ctrl && e.Key == Key.Z) { DoUndo(); e.Handled = true; }
             else if (ctrl && e.Key == Key.Y) { DoRedo(); e.Handled = true; }
             else if (ctrl && e.Key == Key.D)

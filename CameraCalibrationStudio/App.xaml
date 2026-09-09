@@ -7,6 +7,8 @@
             <!-- Modern dark palette: near-black chrome, slightly lifted panels, single accent -->
             <SolidColorBrush x:Key="AppBackground" Color="#16161B"/>
             <SolidColorBrush x:Key="ChromeBackground" Color="#101014"/>
+            <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
+
             <SolidColorBrush x:Key="PanelBackground" Color="#1C1C22"/>
             <SolidColorBrush x:Key="TileBackground" Color="#232329"/>
             <SolidColorBrush x:Key="TileBackgroundHover" Color="#2C2C34"/>

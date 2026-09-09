@@ -1,4 +1,4 @@
-<UserControl x:Class="CameraCalibrationStudio.Views.DataBuilderView"
+﻿<UserControl x:Class="CameraCalibrationStudio.Views.DataBuilderView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:controls="clr-namespace:CameraCalibrationStudio.Controls"
@@ -17,8 +17,10 @@
                 </Border>
                 <Border Style="{StaticResource ToolbarGroup}">
                     <StackPanel Orientation="Horizontal">
-                        <Button Content="Add Data" ToolTip="Save every region as a crop, into a folder named after its class (Ctrl+Enter)"
+                        <Button Content="Add Data" ToolTip="Save the regions on this frame as crops, into a folder named after each label (Ctrl+Enter)"
                                 Click="AddData_Click" Style="{StaticResource PrimaryButton}"/>
+                        <Button Content="Save Database" ToolTip="Close this batch: write labels.csv indexing everything collected, then start fresh (Ctrl+S)"
+                                Click="SaveDatabase_Click" Style="{StaticResource ToolButton}"/>
                     </StackPanel>
                 </Border>
                 <Border Style="{StaticResource ToolbarGroup}">
@@ -102,9 +104,6 @@
                             <Button Grid.Column="1" Content="Manage" Click="ManageClasses_Click" Style="{StaticResource ToolButton}" Margin="3,0,0,0"/>
                         </Grid>
 
-                        <CheckBox x:Name="ClearAfterAddCheck" IsChecked="True" Foreground="{StaticResource TextPrimary}" FontSize="11.5" Margin="0,0,0,4">
-                            <TextBlock Text="Clear regions after Add Data" TextWrapping="Wrap" MaxWidth="190"/>
-                        </CheckBox>
                         <Grid Margin="0,0,0,10">
                             <TextBlock Text="Padding around crop (px)" Foreground="{StaticResource TextSecondary}" FontSize="11" HorizontalAlignment="Left"/>
                             <TextBlock x:Name="PaddingValueText" Text="0" Foreground="{StaticResource TextSecondary}" FontSize="11" HorizontalAlignment="Right"/>
@@ -131,6 +130,9 @@
                                             <TextBlock Grid.Column="1" Text="{Binding Name}" VerticalAlignment="Center"
                                                        TextTrimming="CharacterEllipsis" FontSize="12.5"/>
                                             <StackPanel Grid.Column="2" Orientation="Horizontal">
+                                                <TextBlock Text="✓" Foreground="#5BD68A" FontSize="12" VerticalAlignment="Center"
+                                                           ToolTip="Already saved — Add Data will skip it" Margin="0,0,2,0"
+                                                           Visibility="{Binding IsExported, Converter={StaticResource BoolToVisibility}}"/>
                                                 <TextBlock Text="✎" Foreground="{StaticResource TextSecondary}" Cursor="Hand" ToolTip="Rename"
                                                            MouseLeftButtonDown="RenameRegion_MouseLeftButtonDown" Margin="6,0,0,0"/>
                                                 <TextBlock Text="✕" Foreground="{StaticResource TextSecondary}" Cursor="Hand" ToolTip="Delete"
