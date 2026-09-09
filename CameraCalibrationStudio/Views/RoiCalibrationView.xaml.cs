@@ -388,6 +388,12 @@ namespace CameraCalibrationStudio.Views
             return canvas;
         }
 
+        /// <summary>
+        /// Loads an image handed over from another workspace (the Image Editor). Takes ownership
+        /// of <paramref name="mat"/>, exactly like the other load paths.
+        /// </summary>
+        public void AcceptImage(Mat mat, string displayName) => LoadImageMat(mat, displayName, "", "");
+
         /// <summary>Common entry point for both "Open Image" and "Grab Frame from RTSP" — takes ownership of mat.</summary>
         private void LoadImageMat(Mat mat, string displayName, string path, string suggestedDeviceId)
         {

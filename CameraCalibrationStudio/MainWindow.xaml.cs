@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
@@ -31,23 +31,18 @@ namespace CameraCalibrationStudio
         // AdjustmentSettings pipeline ROI Calibration uses — reconstructed from _editorBase on
         // every change, never accumulated.
         private Mat? _editorBase;
+        /// <summary>Source file name of the editor image, if it came from disk. Used to name the
+        /// image when it is handed to ROI Calibration; null for grabbed frames.</summary>
+        private string? _editorFileName;
         private readonly Stack<Mat> _undoStack = new();
         private readonly PreviewProcessor _editorPreview = new();
         private bool _cropModeActive;
         private Point? _dragStart;
         private OpenCvSharp.Rect? _editorPixelSelection;
 
-        // ---------- Lens calibration state ----------
-        private readonly List<Point2f[]> _acceptedCorners = new();
-        private int _calibImageWidth, _calibImageHeight;
-        private CalibrationProfile? _calibrationProfile;
-
         public MainWindow()
         {
             InitializeComponent();
-
-            _calibrationProfile = ProfileStore.LoadCalibration();
-            RefreshCalibResultText();
 
             FilterGallery.ItemsSource = _filters;
             MainWindow_StateChanged(this, EventArgs.Empty);
@@ -68,8 +63,9 @@ namespace CameraCalibrationStudio
                 MessageBox.Show(this, "Could not open that image.", "Open Image", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
+            _editorFileName = Path.GetFileName(dlg.FileName);
             SetEditorImage(mat, clearUndo: true);
-            EditorStatusText.Text = $"Loaded {Path.GetFileName(dlg.FileName)} ({mat.Width}x{mat.Height})";
+            EditorStatusText.Text = $"Loaded {_editorFileName} ({mat.Width}x{mat.Height})";
         }
 
         private async void GrabRtspEditor_Click(object sender, RoutedEventArgs e)
@@ -77,6 +73,7 @@ namespace CameraCalibrationStudio
             var dlg = new RtspGrabDialog { Owner = this };
             if (dlg.ShowDialog() == true && dlg.CapturedFrame != null)
             {
+                _editorFileName = null; // a grabbed frame has no source file
                 SetEditorImage(dlg.CapturedFrame, clearUndo: true);
                 EditorStatusText.Text = $"Grabbed live frame ({dlg.CapturedFrame.Width}x{dlg.CapturedFrame.Height})";
             }
@@ -295,20 +292,32 @@ namespace CameraCalibrationStudio
         private void FlipH_Click(object sender, RoutedEventArgs e) => ApplyEditorTransform(ImageOpsService.FlipHorizontal, "Flipped horizontally.");
         private void FlipV_Click(object sender, RoutedEventArgs e) => ApplyEditorTransform(ImageOpsService.FlipVertical, "Flipped vertically.");
 
-        private void ApplyUndistort_Click(object sender, RoutedEventArgs e)
+        /// <summary>
+        /// Hands the edited image straight to ROI Calibration and switches to that tab, so a
+        /// frame can be cleaned up here and drawn on there without a save/reopen round trip.
+        /// </summary>
+        private void UseInRoi_Click(object sender, RoutedEventArgs e)
         {
             if (_editorBase == null)
             {
                 ShowEditorMessage("Open an image or grab an RTSP frame first.", isWarning: true);
                 return;
             }
-            if (_calibrationProfile == null)
-            {
-                ShowEditorMessage("No lens calibration profile saved yet. Go to the Lens Calibration tab first.", isWarning: true);
-                return;
-            }
-            ApplyEditorTransform(m => ImageOpsService.Undistort(m, _calibrationProfile.CameraMatrix, _calibrationProfile.DistCoeffs),
-                "Applied lens undistortion.");
+
+            // Bake the current adjustments and filter into the pixels. ROI Calibration keeps its
+            // own non-destructive adjustment stack, so what it receives has to be the finished
+            // image rather than a base plus settings it knows nothing about. Rendered from
+            // _editorBase at full resolution, not from the capped preview.
+            var prepared = ImageOpsService.ApplyAdjustments(_editorBase, CurrentEditorSettings());
+
+            var name = string.IsNullOrWhiteSpace(_editorFileName)
+                ? $"edited_{DateTime.Now:HHmmss}.jpg"
+                : Path.GetFileNameWithoutExtension(_editorFileName) + "_edited.jpg";
+
+            // AcceptImage takes ownership of the Mat.
+            RoiView.AcceptImage(prepared, name);
+            MainTabs.SelectedIndex = 0;
+            ShowEditorMessage($"Sent to ROI Calibration as {name}.", isWarning: false);
         }
 
         private void Resize_Click(object sender, RoutedEventArgs e)
@@ -439,140 +448,6 @@ namespace CameraCalibrationStudio
             var bounds = new OpenCvSharp.Rect(0, 0, imgW, imgH);
             var clipped = rect.Intersect(bounds);
             return clipped.Width > 2 && clipped.Height > 2 ? clipped : null;
-        }
-
-        // =====================================================================
-        // LENS CALIBRATION TAB
-        // =====================================================================
-
-        private bool TryGetBoardSettings(out int cols, out int rows, out double squareSize)
-        {
-            cols = rows = 0; squareSize = 0;
-            if (!int.TryParse(BoardColsBox.Text, out cols) || cols < 3) return false;
-            if (!int.TryParse(BoardRowsBox.Text, out rows) || rows < 3) return false;
-            if (!double.TryParse(SquareSizeBox.Text, out squareSize) || squareSize <= 0) return false;
-            return true;
-        }
-
-        private void AddCalibImagesFromFile_Click(object sender, RoutedEventArgs e)
-        {
-            if (!TryGetBoardSettings(out var cols, out var rows, out _))
-            {
-                MessageBox.Show(this, "Enter valid board columns/rows/square size first.", "Lens Calibration",
-                    MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
-
-            var dlg = new OpenFileDialog { Filter = "Images|*.jpg;*.jpeg;*.png;*.bmp", Multiselect = true };
-            if (dlg.ShowDialog() != true) return;
-
-            foreach (var file in dlg.FileNames)
-            {
-                using var img = Cv2.ImRead(file, ImreadModes.Color);
-                if (img.Empty()) continue;
-                TryAcceptCalibView(img, cols, rows, Path.GetFileName(file));
-            }
-        }
-
-        private async void GrabRtspCalib_Click(object sender, RoutedEventArgs e)
-        {
-            if (!TryGetBoardSettings(out var cols, out var rows, out _))
-            {
-                MessageBox.Show(this, "Enter valid board columns/rows/square size first.", "Lens Calibration",
-                    MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
-
-            var dlg = new RtspGrabDialog { Owner = this };
-            if (dlg.ShowDialog() == true && dlg.CapturedFrame != null)
-            {
-                using var frame = dlg.CapturedFrame;
-                TryAcceptCalibView(frame, cols, rows, "live frame");
-            }
-            await Task.CompletedTask;
-        }
-
-        private void TryAcceptCalibView(Mat image, int cols, int rows, string sourceLabel)
-        {
-            var result = CalibrationService.DetectChessboardCorners(image, cols, rows);
-            CalibPreviewImage.Source = result.PreviewWithOverlay.ToBitmapSource();
-            result.PreviewWithOverlay.Dispose();
-
-            if (!result.Found)
-            {
-                CalibResultText.Text = $"Chessboard NOT found in {sourceLabel}. Try a clearer, well-lit, flat view of the board.\n\n{CalibResultText.Text}";
-                return;
-            }
-
-            _acceptedCorners.Add(result.Corners);
-            _calibImageWidth = image.Width;
-            _calibImageHeight = image.Height;
-            CalibViewsCountText.Text = $"{_acceptedCorners.Count} view(s) accepted";
-            CalibResultText.Text = $"Accepted view from {sourceLabel} ({image.Width}x{image.Height}).\n\n{CalibResultText.Text}";
-        }
-
-        private void ClearCalibViews_Click(object sender, RoutedEventArgs e)
-        {
-            _acceptedCorners.Clear();
-            CalibViewsCountText.Text = "0 views accepted";
-            CalibResultText.Text = "Cleared accepted views.";
-        }
-
-        private void RunCalibration_Click(object sender, RoutedEventArgs e)
-        {
-            if (!TryGetBoardSettings(out var cols, out var rows, out var squareSize))
-            {
-                MessageBox.Show(this, "Enter valid board columns/rows/square size.", "Lens Calibration",
-                    MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
-            if (_acceptedCorners.Count < 3)
-            {
-                MessageBox.Show(this, "Add at least 3 accepted chessboard views before calibrating (10-20 recommended, from varied angles).",
-                    "Lens Calibration", MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
-
-            try
-            {
-                _calibrationProfile = CalibrationService.Calibrate(_acceptedCorners, cols, rows, squareSize, _calibImageWidth, _calibImageHeight);
-                RefreshCalibResultText();
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show(this, $"Calibration failed: {ex.Message}", "Lens Calibration", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-        }
-
-        private void SaveCalibProfile_Click(object sender, RoutedEventArgs e)
-        {
-            if (_calibrationProfile == null)
-            {
-                MessageBox.Show(this, "Run a calibration first.", "Lens Calibration", MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
-            ProfileStore.SaveCalibration(_calibrationProfile);
-            MessageBox.Show(this, "Lens calibration profile saved. It will now be used by \"Undistort\" and Batch Apply.",
-                "Lens Calibration", MessageBoxButton.OK, MessageBoxImage.Information);
-        }
-
-        private void RefreshCalibResultText()
-        {
-            if (_calibrationProfile == null)
-            {
-                CalibResultText.Text = "No calibration run yet.";
-                return;
-            }
-            var p = _calibrationProfile;
-            CalibResultText.Text =
-                $"RMS reprojection error: {p.ReprojectionErrorRms:0.0000}\n" +
-                $"Images used: {p.ImagesUsed}\n" +
-                $"Image size: {p.ImageWidth}x{p.ImageHeight}\n" +
-                $"Board: {p.BoardCols}x{p.BoardRows}, square {p.SquareSizeMm}mm\n\n" +
-                $"Camera matrix:\n" +
-                $"  fx={p.CameraMatrix[0]:0.00}  cx={p.CameraMatrix[2]:0.00}\n" +
-                $"  fy={p.CameraMatrix[4]:0.00}  cy={p.CameraMatrix[5]:0.00}\n\n" +
-                $"Distortion coeffs:\n  {string.Join(", ", p.DistCoeffs.Select(d => d.ToString("0.0000")))}";
         }
 
         // =====================================================================
