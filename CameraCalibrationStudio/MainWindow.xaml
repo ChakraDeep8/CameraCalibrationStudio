@@ -170,6 +170,11 @@
                     </DockPanel>
                 </TabItem>
 
+                <!-- ============================ DATA BUILDER TAB ============================ -->
+                <TabItem Header="Data Builder" Style="{StaticResource DarkTab}">
+                    <views:DataBuilderView x:Name="DataBuilderView"/>
+                </TabItem>
+
         </TabControl>
         </DockPanel>
     </Border>
