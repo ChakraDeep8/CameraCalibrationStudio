@@ -40,7 +40,7 @@ into a folder named after its label:
 
 Regions stay on screen after Add Data with a ✓ against the ones already written, so a second
 click can't duplicate them. **Save Database** closes the batch and appends a `labels.csv`
-tying every crop back to its source frame and exact pixel rectangle — so a mislabelled crop
+tying every crop back to its source frame and exact pixel rectangle, so a mislabelled crop
 is always traceable.
 
 It shares the class library with ROI Calibration, and deliberately has **no** adjustment or
@@ -49,7 +49,7 @@ filter controls: a training set wants the frame as the camera saw it.
 ### 🔗 One click from Image Editor to ROI Calibration
 
 Clean a frame up in the editor, hit **Use in ROI Calibration**, and it opens there ready to
-draw on — adjustments and filter baked into the pixels, full resolution, no save-and-reopen.
+draw on adjustments and filter baked into the pixels, full resolution, no save-and-reopen.
 
 ### 🐛 Clicks over an existing region no longer vanish
 
