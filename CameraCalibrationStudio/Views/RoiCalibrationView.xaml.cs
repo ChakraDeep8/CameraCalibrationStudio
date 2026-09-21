@@ -745,6 +745,75 @@ namespace CameraCalibrationStudio.Views
         }
 
         // =====================================================================
+        // Frame resize
+        // =====================================================================
+
+        /// <summary>
+        /// Resizes the working frame and scales every drawn region with it, so a calibration can
+        /// be produced in whatever resolution the downstream consumer expects (e.g. calibrating a
+        /// 1920x1080 DVR frame down to 1280x720) rather than only in the camera's native size.
+        ///
+        /// This genuinely moves the document into a new pixel space: the saved calibration
+        /// records the new dimensions, and RoiJsonService will refuse to load it back against a
+        /// native-resolution frame. That is the existing resolution guard doing its job, so the
+        /// consequences are spelled out before anything is touched.
+        /// </summary>
+        private void ResizeFrame_Click(object sender, RoutedEventArgs e)
+        {
+            if (_originalMat == null || !_document.HasImage)
+            {
+                MessageBox.Show(Window.GetWindow(this), "Open an image first.", "Resize Frame",
+                    MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            int oldWidth = _document.ImageWidth, oldHeight = _document.ImageHeight;
+            var dlg = new ResizeDialog(oldWidth, oldHeight) { Owner = Window.GetWindow(this) };
+            if (dlg.ShowDialog() != true) return;
+
+            int newWidth = dlg.ResultWidth, newHeight = dlg.ResultHeight;
+            if (newWidth == oldWidth && newHeight == oldHeight) return;
+
+            double sx = (double)newWidth / oldWidth;
+            double sy = (double)newHeight / oldHeight;
+
+            var warning = $"The frame becomes {newWidth}x{newHeight} and all {_document.Objects.Count} region(s) "
+                + "scale with it, so they stay on the same features.\n\n"
+                + "The calibration is then written in the new resolution — reopening it against the "
+                + $"original {oldWidth}x{oldHeight} frame will be refused as a resolution mismatch.";
+
+            if (Math.Abs(sx - sy) > 0.001)
+                warning += "\n\nThe aspect ratio changes, so the image and every region will be stretched unevenly.";
+
+            warning += "\n\nThis clears the undo history. To go back, resize to the original dimensions again.";
+
+            if (MessageBox.Show(Window.GetWindow(this), warning, "Resize Frame",
+                    MessageBoxButton.OKCancel, MessageBoxImage.Warning) != MessageBoxResult.OK)
+                return;
+
+            var resized = ImageOpsService.Resize(_originalMat, newWidth, newHeight);
+            _originalMat.Dispose();
+            _originalMat = resized;
+
+            foreach (var obj in _document.Objects)
+                obj.Scale(sx, sy);
+
+            _document.ImageWidth = newWidth;
+            _document.ImageHeight = newHeight;
+
+            // Undo entries hold geometry only, so an entry recorded before the resize would
+            // restore old-resolution coordinates onto the new frame and misplace every region.
+            _history.Clear();
+
+            _preview.SetSource(_originalMat);
+            UpdateFilterThumbnails();
+            Canvas.LoadImage(_preview.Render(CurrentSettings()), newWidth, newHeight);
+
+            _dirty = true;
+            RefreshAll();
+        }
+
+        // =====================================================================
         // Magic — AI calibration suggestions
         // =====================================================================
 

@@ -52,6 +52,14 @@ namespace CameraCalibrationStudio.Models.Roi
         /// <summary>Moves the whole shape by a pixel delta (used for drag-to-move).</summary>
         public abstract void Translate(double dx, double dy);
 
+        /// <summary>
+        /// Scales the shape about the image origin. Used when the frame itself is resized, so
+        /// regions keep covering the same features instead of being left behind at their old
+        /// pixel positions. Geometry stays in image-pixel space throughout — the new pixel
+        /// space simply becomes the resized frame's.
+        /// </summary>
+        public abstract void Scale(double sx, double sy);
+
         /// <summary>Axis-aligned bounds in image pixel coordinates, for hit-testing/labels.</summary>
         public abstract Rect GetBounds();
     }
@@ -74,6 +82,15 @@ namespace CameraCalibrationStudio.Models.Roi
             X1 += dx; X2 += dx; Y1 += dy; Y2 += dy;
         }
 
+        public override void Scale(double sx, double sy)
+        {
+            X1 *= sx; X2 *= sx; Y1 *= sy; Y2 *= sy;
+
+            // A square scaled unevenly is no longer square, so stop claiming to be one —
+            // otherwise the shape reports Kind.Square while its sides differ.
+            if (IsSquare && Math.Abs(sx - sy) > 1e-6) IsSquare = false;
+        }
+
         public override Rect GetBounds() => new(Math.Min(X1, X2), Math.Min(Y1, Y2), Math.Abs(X2 - X1), Math.Abs(Y2 - Y1));
 
         public override CalibrationObjectBase Clone() =>
@@ -89,6 +106,12 @@ namespace CameraCalibrationStudio.Models.Roi
         {
             for (int i = 0; i < Points.Count; i++)
                 Points[i] = new Point(Points[i].X + dx, Points[i].Y + dy);
+        }
+
+        public override void Scale(double sx, double sy)
+        {
+            for (int i = 0; i < Points.Count; i++)
+                Points[i] = new Point(Points[i].X * sx, Points[i].Y * sy);
         }
 
         public override Rect GetBounds()
@@ -112,6 +135,12 @@ namespace CameraCalibrationStudio.Models.Roi
         {
             Start = new Point(Start.X + dx, Start.Y + dy);
             End = new Point(End.X + dx, End.Y + dy);
+        }
+
+        public override void Scale(double sx, double sy)
+        {
+            Start = new Point(Start.X * sx, Start.Y * sy);
+            End = new Point(End.X * sx, End.Y * sy);
         }
 
         public override Rect GetBounds()

@@ -18,6 +18,8 @@
                         <Button Content="Open Calibration" Click="OpenCalibration_Click" Style="{StaticResource ToolButton}"/>
                         <Button x:Name="MagicButton" Content="✨ Magic" ToolTip="AI calibration suggestions — detects people and circular/square/rectangular objects and proposes regions to review"
                                 Click="Magic_Click" Style="{StaticResource ToolButton}" BorderBrush="{StaticResource AccentBrush}" BorderThickness="1"/>
+                        <Button Content="Resize Frame…" ToolTip="Resize the working frame — regions scale with it, and the calibration is written in the new resolution"
+                                Click="ResizeFrame_Click" Style="{StaticResource ToolButton}"/>
                         <Button Content="Save Frame…" ToolTip="Save the current frame as an image" Click="SaveFrame_Click" Style="{StaticResource ToolButton}"/>
                         <Button Content="Save Calibration" ToolTip="Ctrl+S" Click="SaveCalibration_Click" Style="{StaticResource PrimaryButton}"/>
                     </StackPanel>
