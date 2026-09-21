@@ -1,0 +1,278 @@
+using System;
+using System.Globalization;
+using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
+using System.Windows;
+using System.Windows.Controls;
+using CameraCalibrationStudio.Models.Roi;
+using CameraCalibrationStudio.Services;
+using Microsoft.Win32;
+using Path = System.IO.Path;
+
+namespace CameraCalibrationStudio.Views
+{
+    /// <summary>
+    /// Drives an unattended collection run. Non-modal on purpose: a run can last hours, and
+    /// holding the whole application hostage for that would make the feature unusable for the
+    /// exact case it exists to serve.
+    /// </summary>
+    public partial class CollectRunWindow : Window
+    {
+        private CancellationTokenSource? _cancellation;
+        private Task<CollectionSummary>? _run;
+
+        private bool IsRunning => _run is { IsCompleted: false };
+
+        public CollectRunWindow()
+        {
+            InitializeComponent();
+
+            UrlBox.Text = DataBuilderSettings.LoadCollectUrl();
+            OutputBox.Text = DataBuilderSettings.LoadOutputFolder();
+        }
+
+        // =====================================================================
+        // Starting
+        // =====================================================================
+
+        private async void Start_Click(object sender, RoutedEventArgs e)
+        {
+            if (IsRunning) return;
+
+            // Without the model this would fall back to a pedestrian detector that barely works
+            // on CCTV angles, and an unattended run would quietly fill the dataset with rubbish.
+            // Better to refuse than to produce a bad set nobody notices until training.
+            if (!YoloObjectDetector.IsAvailable)
+            {
+                MessageBox.Show(this,
+                    "The YOLOv8 model isn't loaded, so people can't be detected reliably.\n\n"
+                    + "Check that Assets\\Models\\yolov8s.onnx sits next to the application executable.",
+                    "Collect", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            if (!TryBuildOptions(out var options, out var problem))
+            {
+                MessageBox.Show(this, problem, "Collect", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            DataBuilderSettings.SaveCollectUrl(options.RtspUrl);
+            DataBuilderSettings.SaveOutputFolder(options.OutputFolder);
+
+            SetRunningState(true);
+            RunStatusText.Text = "Connecting to the stream…";
+            PreviewPlaceholder.Visibility = Visibility.Collapsed;
+
+            var progress = new Progress<CollectionProgress>(OnProgress);
+            _cancellation = new CancellationTokenSource();
+            _run = PersonCollectorService.RunAsync(
+                options, () => new RtspFrameSource(options.RtspUrl), progress, _cancellation.Token);
+
+            CollectionSummary summary;
+            try
+            {
+                summary = await _run;
+            }
+            catch (Exception ex)
+            {
+                summary = new CollectionSummary { Error = ex.Message, StoppedBecause = "error" };
+            }
+
+            SetRunningState(false);
+            ShowSummary(summary);
+        }
+
+        /// <summary>Reads the form, rejecting anything that would fail later in a less obvious place.</summary>
+        private bool TryBuildOptions(out CollectionRunOptions options, out string problem)
+        {
+            options = new CollectionRunOptions();
+            problem = "";
+
+            var url = UrlBox.Text.Trim();
+            if (string.IsNullOrWhiteSpace(url)) { problem = "Enter the RTSP URL of the camera."; return false; }
+
+            var folder = OutputBox.Text.Trim();
+            if (string.IsNullOrWhiteSpace(folder)) { problem = "Choose a dataset folder to collect into."; return false; }
+
+            // Checked now rather than discovered twenty minutes into an unattended run.
+            try
+            {
+                Directory.CreateDirectory(folder);
+                var probe = Path.Combine(folder, ".write-test");
+                File.WriteAllText(probe, "");
+                File.Delete(probe);
+            }
+            catch (Exception ex)
+            {
+                problem = $"That dataset folder can't be written to.\n\n{ex.Message}";
+                return false;
+            }
+
+            var label = LabelBox.Text.Trim();
+            if (string.IsNullOrWhiteSpace(label)) label = "Person";
+
+            options.RtspUrl = url;
+            options.OutputFolder = folder;
+            options.LabelName = label;
+            options.FramesPerSecond = FpsSlider.Value;
+            options.MinConfidence = (float)ConfidenceSlider.Value;
+            options.VarietyThreshold = VarietySlider.Value;
+
+            if (UseDuration.IsChecked == true)
+            {
+                if (!double.TryParse(DurationBox.Text.Trim(), NumberStyles.Any, CultureInfo.CurrentCulture, out var minutes) || minutes <= 0)
+                { problem = "Enter a positive number of minutes, or untick that stop condition."; return false; }
+                options.MaxDuration = TimeSpan.FromMinutes(minutes);
+            }
+
+            if (UseCropTarget.IsChecked == true)
+            {
+                if (!int.TryParse(CropTargetBox.Text.Trim(), out var crops) || crops <= 0)
+                { problem = "Enter a positive number of crops, or untick that stop condition."; return false; }
+                options.MaxCrops = crops;
+            }
+
+            if (UseStopAt.IsChecked == true)
+            {
+                if (!TimeSpan.TryParse(StopAtBox.Text.Trim(), CultureInfo.CurrentCulture, out var timeOfDay))
+                { problem = "Enter a clock time as HH:mm, or untick that stop condition."; return false; }
+
+                var stopAt = DateTime.Today.Add(timeOfDay);
+                // A time already past today plainly means tomorrow — an overnight run is the
+                // normal reason to use a clock time at all.
+                if (stopAt <= DateTime.Now) stopAt = stopAt.AddDays(1);
+                options.StopAtLocalTime = stopAt;
+            }
+
+            return true;
+        }
+
+        // =====================================================================
+        // Live state
+        // =====================================================================
+
+        private void OnProgress(CollectionProgress progress)
+        {
+            SavedText.Text = progress.CropsSaved.ToString();
+            SampledText.Text = progress.FramesSampled.ToString();
+            DuplicatesText.Text = progress.DuplicatesSkipped.ToString();
+            ReconnectsText.Text = progress.Reconnects.ToString();
+
+            if (progress.Preview != null) PreviewImage.Source = progress.Preview;
+
+            var parts = new System.Collections.Generic.List<string>
+            {
+                $"running {Describe(progress.Elapsed)}",
+                $"{progress.ActualFps:0.0} fps actual"
+            };
+            if (progress.LowQualitySkipped > 0) parts.Add($"{progress.LowQualitySkipped} too small or uncertain");
+            if (progress.Message != null) parts.Add(progress.Message);
+
+            RunStatusText.Text = string.Join("  ·  ", parts);
+        }
+
+        private void SetRunningState(bool running)
+        {
+            SettingsPanel.IsEnabled = !running;
+            StartButton.Visibility = running ? Visibility.Collapsed : Visibility.Visible;
+            StopButton.Visibility = running ? Visibility.Visible : Visibility.Collapsed;
+            CloseButton.IsEnabled = !running;
+            FooterHintText.Text = running
+                ? "Collecting — the main window is still usable."
+                : "The main window stays usable while a run is going.";
+        }
+
+        private void ShowSummary(CollectionSummary summary)
+        {
+            if (summary.Failed)
+            {
+                RunStatusText.Text = $"Stopped: {summary.Error}";
+                MessageBox.Show(this,
+                    $"{summary.Error}\n\n{summary.CropsSaved} crop(s) were saved before it stopped.",
+                    "Collect", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            RunStatusText.Text =
+                $"Finished — {summary.StoppedBecause}. {summary.CropsSaved} crop(s) from {summary.FramesSampled} sampled frame(s), "
+                + $"{summary.DuplicatesSkipped} look-alike(s) skipped.";
+
+            var detail = $"{summary.CropsSaved} crop(s) saved in {Describe(summary.Elapsed)}.\n\n"
+                + $"Sampled {summary.FramesSampled} frame(s)\n"
+                + $"Skipped {summary.DuplicatesSkipped} look-alike(s)\n"
+                + $"Skipped {summary.LowQualitySkipped} too small or uncertain\n"
+                + (summary.Reconnects > 0 ? $"Reconnected {summary.Reconnects} time(s)\n" : "")
+                + (summary.ManifestPath != null ? $"\nIndexed in {Path.GetFileName(summary.ManifestPath)}." : "");
+
+            MessageBox.Show(this, detail, "Collection finished", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+
+        private static string Describe(TimeSpan span) =>
+            span.TotalHours >= 1 ? $"{(int)span.TotalHours}h {span.Minutes}m" :
+            span.TotalMinutes >= 1 ? $"{(int)span.TotalMinutes}m {span.Seconds}s" :
+            $"{span.Seconds}s";
+
+        // =====================================================================
+        // Stopping
+        // =====================================================================
+
+        private void Stop_Click(object sender, RoutedEventArgs e)
+        {
+            RunStatusText.Text = "Stopping…";
+            _cancellation?.Cancel();
+        }
+
+        private void Close_Click(object sender, RoutedEventArgs e) => Close();
+
+        private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
+        {
+            if (!IsRunning) return;
+
+            var answer = MessageBox.Show(this,
+                "A collection run is still going. Close and stop it?\n\nCrops already saved are kept.",
+                "Collect", MessageBoxButton.OKCancel, MessageBoxImage.Warning);
+
+            if (answer != MessageBoxResult.OK) { e.Cancel = true; return; }
+            _cancellation?.Cancel();
+        }
+
+        // =====================================================================
+        // Form plumbing
+        // =====================================================================
+
+        private void Browse_Click(object sender, RoutedEventArgs e)
+        {
+            // The same save-dialog-as-folder-picker stand-in the Data Builder uses.
+            var dlg = new SaveFileDialog
+            {
+                Title = "Choose the dataset folder",
+                FileName = "Select this folder",
+                Filter = "Folder|*.none",
+                CheckPathExists = true
+            };
+            if (!string.IsNullOrWhiteSpace(OutputBox.Text) && Directory.Exists(OutputBox.Text))
+                dlg.InitialDirectory = OutputBox.Text;
+
+            if (dlg.ShowDialog() != true) return;
+            var folder = Path.GetDirectoryName(dlg.FileName);
+            if (!string.IsNullOrWhiteSpace(folder)) OutputBox.Text = folder;
+        }
+
+        private void Fps_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (FpsValueText != null) FpsValueText.Text = $"{e.NewValue:0.0}";
+        }
+
+        private void Confidence_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (ConfidenceValueText != null) ConfidenceValueText.Text = $"{e.NewValue:0.00}";
+        }
+
+        private void Variety_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (VarietyValueText != null) VarietyValueText.Text = $"{e.NewValue:0.0}";
+        }
+    }
+}

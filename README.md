@@ -188,6 +188,11 @@ Open a whole folder and step through it with `N`/`P`, pick labels with the numbe
 and un-save a crop if you mislabel it. Also runs as **its own app** — the installer adds a
 separate *Data Builder* shortcut.
 
+**Collect from RTSP** builds the set for you: point it at a live stream, choose a sampling rate
+and when to stop (a duration, a crop target, a clock time — whichever comes first), and it
+detects people and writes each one out unattended. Near-identical crops are skipped, so a
+stationary subject doesn't fill the set with the same shot.
+
 </td>
 </tr>
 </table>

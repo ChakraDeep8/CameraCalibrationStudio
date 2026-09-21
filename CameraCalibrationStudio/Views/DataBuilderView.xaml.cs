@@ -100,6 +100,21 @@ namespace CameraCalibrationStudio.Views
             LoadImageFile(dlg.FileName);
         }
 
+        /// <summary>
+        /// Opens the unattended collector. Non-modal and owned by the main window rather than
+        /// this view, so a long run survives switching tabs and the rest of the app stays usable
+        /// while it collects.
+        /// </summary>
+        private void CollectFromRtsp_Click(object sender, RoutedEventArgs e)
+        {
+            var window = new CollectRunWindow
+            {
+                Owner = Window.GetWindow(this),
+                WindowStartupLocation = WindowStartupLocation.CenterOwner
+            };
+            window.Show();
+        }
+
         // =====================================================================
         // Folder navigation — the batch labelling loop
         // =====================================================================
