@@ -236,9 +236,11 @@ removes the last point · `Esc` cancels.
 
 ## 🚀 Quick Start
 
-**Just want to use it?** Grab the
-[latest release](https://github.com/ChakraDeep8/CameraCalibrationStudio/releases/latest),
-extract anywhere, run `CameraCalibrationStudio.exe`. Self-contained — **no .NET install needed**.
+**Just want to use it?** Grab `CameraCalibrationStudio-Setup-<version>.exe` from the
+[latest release](https://github.com/ChakraDeep8/CameraCalibrationStudio/releases/latest) and run it —
+one installer, Start Menu shortcut, optional desktop icon, clean uninstall from *Settings → Apps*.
+Self-contained — **no .NET install needed**, and it doesn't require admin rights (installs
+per-user unless you choose otherwise).
 
 > 💡 If Windows Smart App Control blocks it on first launch, wait a minute and retry. New
 > unsigned binaries are sometimes held briefly while Windows evaluates them.
@@ -251,10 +253,21 @@ cd CameraCalibrationStudio
 dotnet run -c Release --project CameraCalibrationStudio
 ```
 
-**Publishing a standalone build:**
+**Building the installer:**
+
+```powershell
+installer\build-installer.ps1
+```
+
+Publishes a self-contained `win-x64` build and compiles it into
+`dist\CameraCalibrationStudio-Setup-<version>.exe` with [Inno Setup 6](https://jrsoftware.org/isinfo.php)
+(`winget install JRSoftware.InnoSetup` if it isn't already installed). See
+[installer/CameraCalibrationStudio.iss](installer/CameraCalibrationStudio.iss) for the installer
+definition, or run the two steps by hand:
 
 ```powershell
 dotnet publish CameraCalibrationStudio -c Release -r win-x64 --self-contained true -o publish
+ISCC.exe installer\CameraCalibrationStudio.iss
 ```
 
 ---
