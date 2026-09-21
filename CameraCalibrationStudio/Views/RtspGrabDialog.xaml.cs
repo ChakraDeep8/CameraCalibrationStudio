@@ -1,3 +1,4 @@
+using System.Windows.Data;
 using System.Windows;
 using CameraCalibrationStudio.Services;
 using OpenCvSharp;
@@ -13,17 +14,31 @@ namespace CameraCalibrationStudio.Views
         {
             InitializeComponent();
 
-            foreach (var (name, url) in ProfileStore.LoadRtspViewerCameras())
-                SavedCamerasCombo.Items.Add(new CameraOption(name, url));
+            LoadSavedCameras();
+        }
 
-            if (SavedCamerasCombo.Items.Count == 0)
-                SavedCamerasCombo.Items.Add(new CameraOption("(none saved)", ""));
+        /// <summary>Saved cameras, grouped by store as the RTSP Camera Viewer groups them — names
+        /// repeat between stores, so the grouping is what tells them apart.</summary>
+        private void LoadSavedCameras()
+        {
+            var cameras = ProfileStore.LoadRtspViewerCameras();
+            if (cameras.Count == 0)
+            {
+                SavedCamerasCombo.IsEnabled = false;
+                SavedCamerasCombo.ToolTip = "No cameras saved yet — type a URL below.";
+                return;
+            }
+
+            var grouped = new CollectionViewSource { Source = cameras };
+            grouped.GroupDescriptions.Add(new PropertyGroupDescription(nameof(ProfileStore.SavedCamera.GroupName)));
+            SavedCamerasCombo.ItemsSource = grouped.View;
+            SavedCamerasCombo.SelectedIndex = -1;
         }
 
         private void SavedCamerasCombo_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
         {
-            if (SavedCamerasCombo.SelectedItem is CameraOption opt && !string.IsNullOrEmpty(opt.Url))
-                UrlBox.Text = opt.Url;
+            if (SavedCamerasCombo.SelectedItem is ProfileStore.SavedCamera camera)
+                UrlBox.Text = camera.Url;
         }
 
         private void SaveForReuseCheck_CheckedChanged(object sender, RoutedEventArgs e)
