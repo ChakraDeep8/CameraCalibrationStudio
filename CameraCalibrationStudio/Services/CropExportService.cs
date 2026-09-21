@@ -50,7 +50,8 @@ namespace CameraCalibrationStudio.Services
             string outputFolder,
             string sourceImageName,
             Func<string?, string?> classNameResolver,
-            int paddingPx = 0)
+            int paddingPx = 0,
+            CropSizing? sizing = null)
         {
             var results = new List<CropResult>();
             var stamp = DateTime.Now.ToString("HHmmss");
@@ -80,6 +81,12 @@ namespace CameraCalibrationStudio.Services
                 if (string.IsNullOrWhiteSpace(className)) className = "unlabelled";
 
                 var rect = ToPixelRect(region.GetBounds(), source.Width, source.Height, paddingPx);
+
+                // Squaring has to happen before the crop is taken, so the extra width comes from
+                // the frame itself rather than from padding added afterwards.
+                if (sizing?.Fit == CropFit.ExpandToSquare)
+                    rect = ExpandToSquare(rect, source.Width, source.Height);
+
                 if (rect.Width < 2 || rect.Height < 2)
                 {
                     results.Add(new CropResult
@@ -100,7 +107,15 @@ namespace CameraCalibrationStudio.Services
                 file = MakeUnique(file);
 
                 using var crop = new Mat(source, rect);
-                Cv2.ImWrite(file, crop);
+                if (sizing is { TargetSize: > 0 })
+                {
+                    using var sized = ApplySizing(crop, sizing);
+                    Cv2.ImWrite(file, sized);
+                }
+                else
+                {
+                    Cv2.ImWrite(file, crop);
+                }
 
                 results.Add(new CropResult
                 {
@@ -117,6 +132,72 @@ namespace CameraCalibrationStudio.Services
             }
 
             return results;
+        }
+
+        /// <summary>
+        /// Grows a crop rect to a square by taking more of the surrounding frame. When the square
+        /// would fall off an edge it slides back inside rather than padding — real pixels beat
+        /// grey bars — and only shrinks if the frame itself is smaller than the square, which can
+        /// clip a subject taller than the frame is wide.
+        /// </summary>
+        private static Rect ExpandToSquare(Rect rect, int imageWidth, int imageHeight)
+        {
+            int side = Math.Max(rect.Width, rect.Height);
+            side = Math.Min(side, Math.Min(imageWidth, imageHeight));
+
+            int centreX = rect.X + rect.Width / 2;
+            int centreY = rect.Y + rect.Height / 2;
+
+            int x = Math.Clamp(centreX - side / 2, 0, Math.Max(0, imageWidth - side));
+            int y = Math.Clamp(centreY - side / 2, 0, Math.Max(0, imageHeight - side));
+
+            return new Rect(x, y, side, side);
+        }
+
+        /// <summary>Scales one crop to the requested output size. ExpandToSquare arrives here
+        /// already square, so it only needs the scale.</summary>
+        private static Mat ApplySizing(Mat crop, CropSizing sizing)
+        {
+            int target = sizing.TargetSize;
+
+            switch (sizing.Fit)
+            {
+                case CropFit.FixedHeight:
+                {
+                    double scale = target / (double)Math.Max(1, crop.Height);
+                    return ScaleTo(crop, Math.Max(1, (int)Math.Round(crop.Width * scale)), target);
+                }
+
+                case CropFit.Letterbox:
+                {
+                    double scale = Math.Min(target / (double)Math.Max(1, crop.Width),
+                                            target / (double)Math.Max(1, crop.Height));
+                    int w = Math.Max(1, (int)Math.Round(crop.Width * scale));
+                    int h = Math.Max(1, (int)Math.Round(crop.Height * scale));
+
+                    using var scaled = ScaleTo(crop, w, h);
+                    var canvas = new Mat(target, target, crop.Type(), new Scalar(114, 114, 114));
+                    using (var slot = new Mat(canvas, new Rect((target - w) / 2, (target - h) / 2, w, h)))
+                        scaled.CopyTo(slot);
+                    return canvas;
+                }
+
+                case CropFit.Stretch:
+                case CropFit.ExpandToSquare:
+                default:
+                    return ScaleTo(crop, target, target);
+            }
+        }
+
+        /// <summary>Area sampling when shrinking, cubic when enlarging — the right tool each way
+        /// round, and crops are usually being enlarged to reach a 640px target.</summary>
+        private static Mat ScaleTo(Mat crop, int width, int height)
+        {
+            var dst = new Mat();
+            bool shrinking = width < crop.Width || height < crop.Height;
+            Cv2.Resize(crop, dst, new Size(width, height),
+                interpolation: shrinking ? InterpolationFlags.Area : InterpolationFlags.Cubic);
+            return dst;
         }
 
         /// <summary>Bounds to an integer pixel rect, padded then clamped inside the image.</summary>

@@ -37,6 +37,7 @@ namespace CameraCalibrationStudio.Views
 
             SavedCropsList.ItemsSource = _savedCrops;
             LoadSavedCameras();
+            LoadSizeOptions();
 
             UrlBox.Text = DataBuilderSettings.LoadCollectUrl();
             OutputBox.Text = DataBuilderSettings.LoadOutputFolder();
@@ -62,6 +63,61 @@ namespace CameraCalibrationStudio.Views
         private sealed record CameraOption(string Name, string Url)
         {
             public override string ToString() => string.IsNullOrEmpty(Url) ? Name : $"{Name}   ({Url})";
+        }
+
+        // =====================================================================
+        // Output size
+        // =====================================================================
+
+        private void LoadSizeOptions()
+        {
+            SizeCombo.Items.Add(new SizeOption("Original (no resize)", 0));
+            foreach (var size in new[] { 224, 320, 416, 640 })
+                SizeCombo.Items.Add(new SizeOption($"{size} x {size}", size));
+            SizeCombo.SelectedIndex = 0;
+
+            FitCombo.Items.Add(new FitOption("Expand to square — real pixels, more background", CropFit.ExpandToSquare));
+            FitCombo.Items.Add(new FitOption("Letterbox — pad to fit, no distortion", CropFit.Letterbox));
+            FitCombo.Items.Add(new FitOption("Stretch — fills the frame, distorts the subject", CropFit.Stretch));
+            FitCombo.Items.Add(new FitOption("Fixed height — keeps aspect, widths vary", CropFit.FixedHeight));
+            FitCombo.SelectedIndex = 0;
+
+            UpdateFitAvailability();
+        }
+
+        private void Size_SelectionChanged(object sender, SelectionChangedEventArgs e) => UpdateFitAvailability();
+
+        /// <summary>There is nothing to fit when crops keep their natural size, so the fit choice
+        /// is disabled rather than left looking as though it applies.</summary>
+        private void UpdateFitAvailability()
+        {
+            if (FitCombo == null || FitHintText == null) return;
+
+            bool resizing = SizeCombo.SelectedItem is SizeOption { Pixels: > 0 };
+            FitCombo.IsEnabled = resizing;
+
+            FitHintText.Text = !resizing
+                ? "Original keeps each crop at whatever size it came out of the frame."
+                : FitCombo.SelectedItem is FitOption { Fit: CropFit.FixedHeight }
+                    ? "Heights match but widths follow the subject, so files won't all be the same size."
+                    : "Every crop is written at exactly this size.";
+        }
+
+        private CropSizing? SelectedSizing()
+        {
+            if (SizeCombo.SelectedItem is not SizeOption { Pixels: > 0 } size) return null;
+            var fit = FitCombo.SelectedItem is FitOption option ? option.Fit : CropFit.ExpandToSquare;
+            return new CropSizing { TargetSize = size.Pixels, Fit = fit };
+        }
+
+        private sealed record SizeOption(string Label, int Pixels)
+        {
+            public override string ToString() => Label;
+        }
+
+        private sealed record FitOption(string Label, CropFit Fit)
+        {
+            public override string ToString() => Label;
         }
 
         // =====================================================================
@@ -151,6 +207,7 @@ namespace CameraCalibrationStudio.Views
             options.FramesPerSecond = FpsSlider.Value;
             options.MinConfidence = (float)ConfidenceSlider.Value;
             options.VarietyThreshold = VarietySlider.Value;
+            options.CropSizing = SelectedSizing();
 
             if (UseDuration.IsChecked == true)
             {

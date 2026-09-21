@@ -89,6 +89,15 @@
                     <TextBox Grid.Column="1" x:Name="StopAtBox" Text="18:00" Style="{StaticResource InputBox}"/>
                 </Grid>
 
+                <TextBlock Text="OUTPUT SIZE" Style="{StaticResource SectionLabel}" Margin="0,0,0,4"/>
+                <ComboBox x:Name="SizeCombo" Margin="0,0,0,4" SelectionChanged="Size_SelectionChanged"
+                          ToolTip="Every crop is written at this size"/>
+                <ComboBox x:Name="FitCombo" Margin="0,0,0,4"
+                          ToolTip="How a tall person-shaped crop is made to fit that size"/>
+                <TextBlock x:Name="FitHintText" Foreground="{StaticResource TextSecondary}" FontSize="10.5"
+                           TextWrapping="Wrap" Margin="0,0,0,10"
+                           Text="Original keeps each crop at whatever size it came out of the frame."/>
+
                 <TextBlock Text="QUALITY" Style="{StaticResource SectionLabel}" Margin="0,0,0,4"/>
                 <Grid Margin="0,0,0,2">
                     <TextBlock Text="Minimum confidence" Foreground="{StaticResource TextSecondary}" FontSize="11" HorizontalAlignment="Left"/>

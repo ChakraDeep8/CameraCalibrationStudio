@@ -248,7 +248,8 @@ namespace CameraCalibrationStudio.Services
                 var frameName = $"rtsp_{DateTime.Now:yyyyMMdd_HHmmss}_{sampleNumber:D5}.jpg";
                 Directory.CreateDirectory(options.OutputFolder);
                 written.AddRange(CropExportService
-                    .ExportCrops(frame, keep, options.OutputFolder, frameName, _ => null, options.PaddingPixels)
+                    .ExportCrops(frame, keep, options.OutputFolder, frameName, _ => null,
+                        options.PaddingPixels, options.CropSizing)
                     .Where(r => r.Saved));
             }
             catch (Exception ex)

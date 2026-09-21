@@ -35,6 +35,10 @@ namespace CameraCalibrationStudio.Models.Roi
 
         public int PaddingPixels { get; set; }
 
+        /// <summary>Uniform output size for every crop, or null to keep each one at whatever size
+        /// it came out of the frame.</summary>
+        public CropSizing? CropSizing { get; set; }
+
         /// <summary>Mean absolute difference (0-255 scale) below which two crops in the same place
         /// count as the same shot. Higher keeps more, lower demands more variety.</summary>
         public double VarietyThreshold { get; set; } = 6.0;
