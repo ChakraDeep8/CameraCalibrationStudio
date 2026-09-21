@@ -12,7 +12,7 @@
 ; them by hand.
 
 #define MyAppName "Camera Calibration & Image Studio"
-#define MyAppVersion "1.3.0"
+#define MyAppVersion "1.4.0"
 #define MyAppPublisher "ChakraDeep8"
 #define MyAppURL "https://github.com/ChakraDeep8/CameraCalibrationStudio"
 #define MyAppExeName "CameraCalibrationStudio.exe"

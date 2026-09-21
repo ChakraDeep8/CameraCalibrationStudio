@@ -11,7 +11,7 @@
     <Platforms>x64</Platforms>
     <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
     <ApplicationIcon>Assets\logo.ico</ApplicationIcon>
-    <Version>1.3.0</Version>
+    <Version>1.4.0</Version>
     <!-- The app has no localized UI text, so publishing WPF's satellite resource DLLs for
          every language (zh-Hans, zh-Hant, ja, ko, ...) is dead weight the installer would
          otherwise have to carry — this alone was most of the publish output's size. -->
