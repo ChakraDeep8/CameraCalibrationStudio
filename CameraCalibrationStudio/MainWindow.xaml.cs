@@ -3,10 +3,12 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Shapes;
 using CameraCalibrationStudio.Models;
@@ -45,6 +47,7 @@ namespace CameraCalibrationStudio
             InitializeComponent();
 
             FilterGallery.ItemsSource = _filters;
+            SourceInitialized += MainWindow_SourceInitialized;
             MainWindow_StateChanged(this, EventArgs.Empty);
         }
 
@@ -480,13 +483,102 @@ namespace CameraCalibrationStudio
 
         private void MainWindow_StateChanged(object? sender, EventArgs e)
         {
-            // A maximized WindowStyle=None window otherwise renders a few pixels past the
-            // visible work area on Windows; inset the content by the standard resize-border
-            // thickness while maximized, and remove the inset again when restored.
-            RootBorder.Margin = WindowState == WindowState.Maximized ? new Thickness(7) : new Thickness(0);
+            // The WM_GETMINMAXINFO hook below (see MainWindow_SourceInitialized) clamps the
+            // maximized window to the real monitor work area, so \u2014 unlike the old fixed-pixel
+            // margin hack this replaced \u2014 no inset is needed here; the window's actual bounds
+            // are already correct and never spill past the screen edge or under the taskbar.
+            RootBorder.Margin = new Thickness(0);
 
             RestoreButton.Content = WindowState == WindowState.Maximized ? "\uE923" : "\uE922";
             RestoreButton.ToolTip = WindowState == WindowState.Maximized ? "Restore" : "Maximize";
+        }
+
+        // =====================================================================
+        // Maximize sizing fix \u2014 WindowStyle="None" windows are not auto-clamped
+        // to the monitor's work area by WPF the way normal-chrome windows are,
+        // so WindowState="Maximized" can end up wider/taller than the actual
+        // screen (covering the taskbar, or overflowing onto an adjacent monitor
+        // in a multi-monitor setup) and DPI can shift that further. Handling
+        // WM_GETMINMAXINFO directly and sizing from the correct monitor's real
+        // work-area rect is the standard, robust fix \u2014 it also respects
+        // MinWidth/MinHeight (set on the Window in XAML) via ptMinTrackSize.
+        // =====================================================================
+
+        private void MainWindow_SourceInitialized(object? sender, EventArgs e)
+        {
+            var handle = new WindowInteropHelper(this).Handle;
+            HwndSource.FromHwnd(handle)?.AddHook(MaximizeBoundsHook);
+        }
+
+        private IntPtr MaximizeBoundsHook(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+        {
+            const int WM_GETMINMAXINFO = 0x0024;
+            if (msg == WM_GETMINMAXINFO)
+            {
+                ClampToMonitorWorkArea(hwnd, lParam);
+                handled = true;
+            }
+            return IntPtr.Zero;
+        }
+
+        private static void ClampToMonitorWorkArea(IntPtr hwnd, IntPtr lParam)
+        {
+            const int MONITOR_DEFAULTTONEAREST = 0x00000002;
+
+            var monitor = NativeMethods.MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+            if (monitor == IntPtr.Zero) return;
+
+            var info = new NativeMethods.MONITORINFO { cbSize = Marshal.SizeOf<NativeMethods.MONITORINFO>() };
+            if (!NativeMethods.GetMonitorInfo(monitor, ref info)) return;
+
+            var work = info.rcWork;
+            var bounds = info.rcMonitor;
+
+            var mmi = Marshal.PtrToStructure<NativeMethods.MINMAXINFO>(lParam);
+
+            // Position/size are relative to the monitor's own top-left, not the virtual desktop.
+            mmi.ptMaxPosition.X = work.Left - bounds.Left;
+            mmi.ptMaxPosition.Y = work.Top - bounds.Top;
+            mmi.ptMaxSize.X = work.Right - work.Left;
+            mmi.ptMaxSize.Y = work.Bottom - work.Top;
+            mmi.ptMaxTrackSize.X = mmi.ptMaxSize.X;
+            mmi.ptMaxTrackSize.Y = mmi.ptMaxSize.Y;
+
+            Marshal.StructureToPtr(mmi, lParam, true);
+        }
+
+        private static class NativeMethods
+        {
+            [StructLayout(LayoutKind.Sequential)]
+            public struct POINT { public int X; public int Y; }
+
+            [StructLayout(LayoutKind.Sequential)]
+            public struct RECT { public int Left; public int Top; public int Right; public int Bottom; }
+
+            [StructLayout(LayoutKind.Sequential)]
+            public struct MONITORINFO
+            {
+                public int cbSize;
+                public RECT rcMonitor;
+                public RECT rcWork;
+                public int dwFlags;
+            }
+
+            [StructLayout(LayoutKind.Sequential)]
+            public struct MINMAXINFO
+            {
+                public POINT ptReserved;
+                public POINT ptMaxSize;
+                public POINT ptMaxPosition;
+                public POINT ptMinTrackSize;
+                public POINT ptMaxTrackSize;
+            }
+
+            [DllImport("user32.dll")]
+            public static extern IntPtr MonitorFromWindow(IntPtr hwnd, int dwFlags);
+
+            [DllImport("user32.dll", CharSet = CharSet.Auto)]
+            public static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFO lpmi);
         }
 
         // =====================================================================
