@@ -14,9 +14,10 @@ using Size = OpenCvSharp.Size;
 namespace CameraCalibrationStudio.Services
 {
     /// <summary>
-    /// Real object detection for Magic, via a bundled YOLOv8s ONNX model (Assets/Models/yolov8s.onnx,
-    /// Ultralytics, AGPL-3.0) run on-device through ONNX Runtime — no network call at inference
-    /// time, only the model file shipped with the app. Unlike the classical shape/contour
+    /// Real object detection for Magic, via a YOLOv8s ONNX model run on-device through ONNX
+    /// Runtime — no network call at inference time. The weights are Ultralytics' and AGPL-3.0, so
+    /// they are fetched to the user's app-data folder on first use rather than distributed with
+    /// this source; see ModelStore for why. Unlike the classical shape/contour
     /// heuristics elsewhere in AiCalibrationService, this is a trained classifier: it recognizes
     /// 80 COCO categories (person, car, chair, bottle, ...) by name, not just "some object here".
     /// Suggestions are still just suggestions — the technician reviews, renames/reclassifies or
@@ -33,7 +34,7 @@ namespace CameraCalibrationStudio.Services
         {
             try
             {
-                var path = Path.Combine(AppContext.BaseDirectory, "Assets", "Models", "yolov8s.onnx");
+                var path = ModelStore.ModelPath;
                 return File.Exists(path) ? new InferenceSession(path) : null;
             }
             catch

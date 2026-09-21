@@ -20,10 +20,9 @@
 
   <ItemGroup>
     <Resource Include="Assets\logo.png" />
-    <!-- Bundled YOLOv8s ONNX weights (Ultralytics, AGPL-3.0) that power Magic's real object
-         detector — see Services/YoloObjectDetector.cs. Copied next to the exe on every
-         build/publish so it ships inside the installer without any first-run download. -->
-    <None Include="Assets\Models\yolov8s.onnx" CopyToOutputDirectory="PreserveNewest" />
+    <!-- The YOLOv8 weights are deliberately NOT bundled: they are Ultralytics' and AGPL-3.0, so
+         shipping them would place that licence's obligations on this project. ModelStore fetches
+         them to the user's app-data folder on first use instead. -->
   </ItemGroup>
 
   <ItemGroup>

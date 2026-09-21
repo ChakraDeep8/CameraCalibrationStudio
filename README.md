@@ -288,6 +288,29 @@ ISCC.exe installer\CameraCalibrationStudio.iss
 
 ---
 
+## 🤖 The detection model
+
+Magic's object detection and the Data Builder's RTSP collector both use **YOLOv8s**, which is
+**not bundled with this repository**. The weights are
+[Ultralytics'](https://github.com/ultralytics/ultralytics) and licensed **AGPL-3.0**; shipping
+them here would place that licence's obligations on this project, so the app downloads them on
+first use instead.
+
+The first time you run Magic or start a collection run, you'll be offered a one-time ~43MB
+download of `yolov8s.onnx` into:
+
+```
+%AppData%\CameraCalibrationStudio\Models\yolov8s.onnx
+```
+
+You can also place the file there yourself. Magic still works without it — it falls back to the
+classical shape/contour detectors — but detection is far weaker.
+
+> ⚠️ **If you redistribute a build that includes those weights, AGPL-3.0 applies to what you
+> distribute.** Worth understanding before packaging this for anyone else.
+
+---
+
 ## 📝 Notes
 
 - RTSP and video frame grabs use OpenCV's built-in FFmpeg backend directly — no external

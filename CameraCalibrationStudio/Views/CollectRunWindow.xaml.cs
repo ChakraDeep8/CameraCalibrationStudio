@@ -131,14 +131,7 @@ namespace CameraCalibrationStudio.Views
             // Without the model this would fall back to a pedestrian detector that barely works
             // on CCTV angles, and an unattended run would quietly fill the dataset with rubbish.
             // Better to refuse than to produce a bad set nobody notices until training.
-            if (!YoloObjectDetector.IsAvailable)
-            {
-                MessageBox.Show(this,
-                    "The YOLOv8 model isn't loaded, so people can't be detected reliably.\n\n"
-                    + "Check that Assets\\Models\\yolov8s.onnx sits next to the application executable.",
-                    "Collect", MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
+            if (!await EnsureModelAsync()) return;
 
             if (!TryBuildOptions(out var options, out var problem))
             {
@@ -170,6 +163,49 @@ namespace CameraCalibrationStudio.Views
 
             SetRunningState(false);
             ShowSummary(summary);
+        }
+
+        /// <summary>
+        /// Makes sure the detection weights are on disk, downloading them on first use.
+        ///
+        /// Asked rather than done silently: it is a ~43MB download that the user may not want on
+        /// a metered connection, and an unexplained pause at the moment you press Start is a poor
+        /// way to discover it. See ModelStore for why the weights aren't shipped with the app.
+        /// </summary>
+        private async Task<bool> EnsureModelAsync()
+        {
+            if (ModelStore.IsPresent) return true;
+
+            var answer = MessageBox.Show(this,
+                "Person detection needs the YOLOv8 model, which isn't downloaded yet.\n\n"
+                + "It's about 43MB and is fetched once, then kept in your app data folder.\n\n"
+                + "Download it now?",
+                "One-time download", MessageBoxButton.OKCancel, MessageBoxImage.Information);
+            if (answer != MessageBoxResult.OK) return false;
+
+            SetRunningState(true);
+            StopButton.Visibility = Visibility.Collapsed; // nothing to stop yet; this isn't a run
+            RunStatusText.Text = "Downloading the detection model…";
+
+            var progress = new Progress<double>(fraction =>
+                RunStatusText.Text = $"Downloading the detection model… {fraction * 100:0}%");
+
+            var (ok, error) = await ModelStore.EnsureAsync(progress);
+
+            SetRunningState(false);
+
+            if (!ok)
+            {
+                RunStatusText.Text = "Model download failed.";
+                MessageBox.Show(this,
+                    $"The model could not be downloaded.\n\n{error}\n\n"
+                    + $"You can also place yolov8s.onnx manually at:\n{ModelStore.ModelPath}",
+                    "Download failed", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return false;
+            }
+
+            RunStatusText.Text = "Model ready.";
+            return true;
         }
 
         /// <summary>Reads the form, rejecting anything that would fail later in a less obvious place.</summary>

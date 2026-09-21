@@ -744,6 +744,38 @@ namespace CameraCalibrationStudio.Views
             RefreshAll();
         }
 
+        /// <summary>
+        /// Offers to fetch the detection weights, reporting progress on the status bar. Asked
+        /// rather than done silently: it is a ~43MB download the user may not want on a metered
+        /// connection. Returns false if they decline or it fails, leaving Magic to fall back.
+        /// </summary>
+        private async Task<bool> OfferModelDownloadAsync()
+        {
+            var answer = MessageBox.Show(Window.GetWindow(this),
+                "Magic's object detection needs the YOLOv8 model, which isn't downloaded yet.\n\n"
+                + "It's about 43MB and is fetched once, then kept in your app data folder.\n\n"
+                + "Download it now?",
+                "One-time download", MessageBoxButton.OKCancel, MessageBoxImage.Information);
+            if (answer != MessageBoxResult.OK) return false;
+
+            var progress = new Progress<double>(fraction =>
+                StatusText.Text = $"Downloading the detection model… {fraction * 100:0}%");
+
+            var (ok, error) = await ModelStore.EnsureAsync(progress);
+            if (!ok)
+            {
+                StatusText.Text = "Model download failed.";
+                MessageBox.Show(Window.GetWindow(this),
+                    $"The model could not be downloaded.\n\n{error}\n\n"
+                    + $"You can also place yolov8s.onnx manually at:\n{ModelStore.ModelPath}",
+                    "Download failed", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return false;
+            }
+
+            StatusText.Text = "Model ready.";
+            return true;
+        }
+
         // =====================================================================
         // Frame resize
         // =====================================================================
@@ -837,16 +869,16 @@ namespace CameraCalibrationStudio.Views
             if (optionsDlg.ShowDialog() != true || optionsDlg.Result == null) return;
             var options = optionsDlg.Result;
 
-            // Say so plainly rather than quietly degrading: without the model this falls back to
-            // the far weaker HOG pedestrian detector, and results that look like "the AI is bad"
-            // are really "the AI never ran".
-            if (options.UseYolo && !YoloObjectDetector.IsAvailable)
+            // The weights aren't shipped with the app, so the first Magic run fetches them.
+            // Declining is allowed — the classical detectors still work — but it is said plainly
+            // rather than degrading quietly, because results that look like "the AI is bad" are
+            // otherwise really "the AI never ran".
+            if (options.UseYolo && !ModelStore.IsPresent && !await OfferModelDownloadAsync())
             {
                 MessageBox.Show(Window.GetWindow(this),
-                    "The YOLOv8 model file couldn't be loaded, so Magic is falling back to the basic "
-                    + "pedestrian detector.\n\nExpect far weaker results — it only looks for people, and "
-                    + "only at a distance. Check that Assets\\Models\\yolov8s.onnx sits next to the "
-                    + "application executable.",
+                    "Continuing without the model, so Magic is falling back to the basic pedestrian "
+                    + "detector.\n\nExpect far weaker results — it only looks for people, and only "
+                    + "at a distance.",
                     "Magic — model unavailable", MessageBoxButton.OK, MessageBoxImage.Warning);
             }
 
