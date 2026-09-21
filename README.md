@@ -184,6 +184,10 @@ Draw a box around each subject, label it, press **Add Data** — every region is
 its own image into a folder named after its label. **Save Database** closes the batch with a
 `labels.csv` index.
 
+Open a whole folder and step through it with `N`/`P`, pick labels with the number keys `1`–`9`,
+and un-save a crop if you mislabel it. Also runs as **its own app** — the installer adds a
+separate *Data Builder* shortcut.
+
 </td>
 </tr>
 </table>

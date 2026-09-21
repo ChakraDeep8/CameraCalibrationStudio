@@ -37,12 +37,25 @@ namespace CameraCalibrationStudio.Views
         private readonly ObservableCollection<CalibrationClass> _classLibrary;
         private CalibrationClass? _activeClass;
 
-        /// <summary>Running per-label totals for this batch, shown in the sidebar.</summary>
+        /// <summary>Per-label totals for the whole session. These deliberately outlive a batch:
+        /// Save Database closes a batch, it does not start a new day's work.</summary>
         private readonly ObservableCollection<ClassCount> _sessionCounts = new();
         private int _sessionTotal;
 
-        /// <summary>Every crop written since the last Save Database, for the batch manifest.</summary>
+        /// <summary>Crops written since the last Save Database — the open batch.</summary>
         private readonly List<CropResult> _batchCrops = new();
+
+        /// <summary>Image extensions the folder walk and drag-drop both accept.</summary>
+        private static readonly string[] ImageExtensions = { ".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff" };
+
+        /// <summary>Frames in the folder currently being worked through, and where we are in it.
+        /// Empty when the frame came from somewhere without a folder to step through, such as an
+        /// RTSP or video grab.</summary>
+        private List<string> _folderImages = new();
+        private int _folderIndex = -1;
+
+        /// <summary>The first nine labels, bound to the number keys and listed in the sidebar.</summary>
+        private readonly ObservableCollection<LabelShortcut> _labelShortcuts = new();
 
         private bool _syncingSelection;
 
@@ -62,9 +75,12 @@ namespace CameraCalibrationStudio.Views
 
             RegionList.ItemsSource = _document.Objects;
             SessionCountsList.ItemsSource = _sessionCounts;
+            LabelShortcutList.ItemsSource = _labelShortcuts;
 
             OutputFolderBox.Text = DataBuilderSettings.LoadOutputFolder();
             UpdateActiveClassDisplay();
+            RefreshLabelShortcuts();
+            RefreshFolderPosition();
             Canvas.Tool = ToolMode.Rectangle;
         }
 
@@ -74,9 +90,129 @@ namespace CameraCalibrationStudio.Views
 
         private void OpenImage_Click(object sender, RoutedEventArgs e)
         {
-            var dlg = new OpenFileDialog { Filter = "Images|*.jpg;*.jpeg;*.png;*.bmp" };
+            var dlg = new OpenFileDialog { Filter = "Images|*.jpg;*.jpeg;*.png;*.bmp;*.tif;*.tiff" };
             if (dlg.ShowDialog() != true) return;
+
+            // Opening one frame still seeds the folder it lives in, so N/P work immediately —
+            // labelling rarely stops at a single frame, and making the user re-open the folder
+            // to get there would be busywork.
+            AdoptFolderOf(dlg.FileName);
             LoadImageFile(dlg.FileName);
+        }
+
+        // =====================================================================
+        // Folder navigation — the batch labelling loop
+        // =====================================================================
+
+        private void OpenFolder_Click(object sender, RoutedEventArgs e)
+        {
+            var folder = PickFolder("Choose a folder of frames to label");
+            if (folder == null) return;
+
+            var images = EnumerateImages(folder);
+            if (images.Count == 0)
+            {
+                UpdateStatus($"No images found in {folder}.", isWarning: true);
+                return;
+            }
+
+            if (!ConfirmLeavingUnsavedRegions()) return;
+
+            _folderImages = images;
+            _folderIndex = 0;
+            LoadImageFile(images[0]);
+        }
+
+        private void PrevImage_Click(object sender, RoutedEventArgs e) => StepFolder(-1);
+        private void NextImage_Click(object sender, RoutedEventArgs e) => StepFolder(+1);
+
+        private void StepFolder(int delta)
+        {
+            if (_folderImages.Count == 0)
+            {
+                UpdateStatus("Open an image or a folder first — then N and P step through its frames.", isWarning: true);
+                return;
+            }
+
+            int target = _folderIndex + delta;
+            if (target < 0) { UpdateStatus("Already at the first frame in this folder."); return; }
+            if (target >= _folderImages.Count) { UpdateStatus("Already at the last frame in this folder."); return; }
+
+            if (!ConfirmLeavingUnsavedRegions()) return;
+
+            _folderIndex = target;
+            LoadImageFile(_folderImages[target]);
+        }
+
+        /// <summary>
+        /// Regions that have not been through Add Data exist only on screen, so moving to another
+        /// frame would discard that work silently. Ask first rather than lose it.
+        /// </summary>
+        private bool ConfirmLeavingUnsavedRegions()
+        {
+            int pending = _document.Objects.Count(o => o.IsVisible && !o.IsExported);
+            if (pending == 0) return true;
+
+            return MessageBox.Show(Window.GetWindow(this),
+                $"{pending} region(s) on this frame haven't been saved yet — leaving now discards them.\n\n"
+                + "Press Add Data first if you want to keep them.\n\nMove to the other frame anyway?",
+                "Unsaved regions", MessageBoxButton.OKCancel, MessageBoxImage.Warning) == MessageBoxResult.OK;
+        }
+
+        /// <summary>Points folder navigation at the directory holding <paramref name="path"/>,
+        /// positioned on that file.</summary>
+        private void AdoptFolderOf(string path)
+        {
+            var folder = Path.GetDirectoryName(path);
+            if (string.IsNullOrWhiteSpace(folder)) { ClearFolderContext(); return; }
+
+            _folderImages = EnumerateImages(folder);
+            _folderIndex = _folderImages.FindIndex(f => string.Equals(f, path, StringComparison.OrdinalIgnoreCase));
+            if (_folderIndex < 0) ClearFolderContext();
+        }
+
+        private void ClearFolderContext()
+        {
+            _folderImages = new List<string>();
+            _folderIndex = -1;
+        }
+
+        private static List<string> EnumerateImages(string folder)
+        {
+            try
+            {
+                return Directory.EnumerateFiles(folder)
+                    .Where(f => ImageExtensions.Contains(Path.GetExtension(f).ToLowerInvariant()))
+                    .OrderBy(f => f, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+            }
+            catch
+            {
+                return new List<string>();
+            }
+        }
+
+        private void RefreshFolderPosition() =>
+            FolderPositionText.Text = _folderImages.Count == 0 || _folderIndex < 0
+                ? "—"
+                : $"{_folderIndex + 1} / {_folderImages.Count}";
+
+        /// <summary>A save dialog stands in for a folder picker — see BrowseOutput_Click for why.</summary>
+        private string? PickFolder(string title)
+        {
+            var dlg = new SaveFileDialog
+            {
+                Title = title,
+                FileName = "Select this folder",
+                Filter = "Folder|*.none",
+                CheckPathExists = true
+            };
+            if (_folderIndex >= 0 && _folderImages.Count > 0)
+                dlg.InitialDirectory = Path.GetDirectoryName(_folderImages[_folderIndex]);
+
+            if (dlg.ShowDialog() != true) return null;
+            var folder = Path.GetDirectoryName(dlg.FileName);
+            return string.IsNullOrWhiteSpace(folder) ? null : folder;
         }
 
         private void LoadImageFile(string path)
@@ -99,15 +235,20 @@ namespace CameraCalibrationStudio.Views
         private void GrabRtsp_Click(object sender, RoutedEventArgs e)
         {
             var dlg = new RtspGrabDialog { Owner = Window.GetWindow(this) };
-            if (dlg.ShowDialog() == true && dlg.CapturedFrame != null)
-                LoadMat(dlg.CapturedFrame, $"live_{DateTime.Now:HHmmss}.jpg");
+            if (dlg.ShowDialog() != true || dlg.CapturedFrame == null) return;
+
+            // A live grab has no folder behind it, so there is nothing to step through.
+            ClearFolderContext();
+            LoadMat(dlg.CapturedFrame, $"live_{DateTime.Now:HHmmss}.jpg");
         }
 
         private void GrabVideo_Click(object sender, RoutedEventArgs e)
         {
             var dlg = new VideoGrabDialog { Owner = Window.GetWindow(this) };
-            if (dlg.ShowDialog() == true && dlg.CapturedFrame != null)
-                LoadMat(dlg.CapturedFrame, dlg.SuggestedName);
+            if (dlg.ShowDialog() != true || dlg.CapturedFrame == null) return;
+
+            ClearFolderContext();
+            LoadMat(dlg.CapturedFrame, dlg.SuggestedName);
         }
 
         /// <summary>Takes ownership of <paramref name="mat"/>.</summary>
@@ -127,7 +268,12 @@ namespace CameraCalibrationStudio.Views
             Canvas.LoadImage(bitmap, mat.Width, mat.Height);
 
             EmptyState.Visibility = Visibility.Collapsed;
-            UpdateStatus($"{displayName}  |  {mat.Width} x {mat.Height}  |  draw a box around each subject");
+            RefreshFolderPosition();
+
+            var position = _folderImages.Count > 0 && _folderIndex >= 0
+                ? $"  |  frame {_folderIndex + 1} of {_folderImages.Count}"
+                : "";
+            UpdateStatus($"{displayName}  |  {mat.Width} x {mat.Height}{position}  |  draw a box around each subject");
         }
 
         private void EmptyState_DragOver(object sender, DragEventArgs e)
@@ -141,8 +287,11 @@ namespace CameraCalibrationStudio.Views
             if (!e.Data.GetDataPresent(DataFormats.FileDrop)) return;
             var files = (string[])e.Data.GetData(DataFormats.FileDrop);
             var file = files.FirstOrDefault(f =>
-                new[] { ".jpg", ".jpeg", ".png", ".bmp" }.Contains(Path.GetExtension(f).ToLowerInvariant()));
-            if (file != null) LoadImageFile(file);
+                ImageExtensions.Contains(Path.GetExtension(f).ToLowerInvariant()));
+            if (file == null) return;
+
+            AdoptFolderOf(file);
+            LoadImageFile(file);
         }
 
         // =====================================================================
@@ -307,9 +456,10 @@ namespace CameraCalibrationStudio.Views
                 "Save Database", MessageBoxButton.OK, MessageBoxImage.Information);
 
             // Start the next batch clean: the regions on screen belong to the batch just closed.
+            // The session tallies deliberately survive — closing a batch is not the end of the
+            // sitting, and zeroing the day's progress every time you index one made the sidebar
+            // read as though nothing had been collected.
             _batchCrops.Clear();
-            _sessionCounts.Clear();
-            _sessionTotal = 0;
             _document.Objects.Clear();
             _history.Clear();
             Canvas.Select(null);
@@ -319,18 +469,85 @@ namespace CameraCalibrationStudio.Views
             UpdateStatus($"Batch closed — {crops} crop(s) indexed in {manifest}. Ready for the next batch.");
         }
 
+        // =====================================================================
+        // Un-save a crop — a mislabel is fixable here rather than in Explorer
+        // =====================================================================
+
+        private void UnExportRegion_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            if (sender is not FrameworkElement fe || fe.DataContext is not CalibrationObjectBase obj) return;
+            e.Handled = true;
+            UnExportRegion(obj);
+        }
+
+        /// <summary>
+        /// Deletes the crop this region produced and clears its tick, so it can be relabelled and
+        /// added again. Only reaches into the open batch: once Save Database has closed one, its
+        /// crops are no longer tracked in memory and the file has to be dealt with on disk.
+        /// </summary>
+        private void UnExportRegion(CalibrationObjectBase obj)
+        {
+            // Matched on the source frame as well as the region name: a batch spans many frames
+            // and the same label ("Staff") recurs on each, so name alone would happily delete
+            // another frame's crop.
+            var crop = _batchCrops.FirstOrDefault(c =>
+                c.Saved
+                && string.Equals(c.RegionName, obj.Name, StringComparison.Ordinal)
+                && string.Equals(c.SourceImage, _document.ImageFileName, StringComparison.OrdinalIgnoreCase));
+
+            if (crop?.SavedPath == null)
+            {
+                UpdateStatus($"\"{obj.Name}\" isn't in the open batch — crops from a saved batch have to be removed on disk.",
+                    isWarning: true);
+                return;
+            }
+
+            try
+            {
+                if (File.Exists(crop.SavedPath)) File.Delete(crop.SavedPath);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(Window.GetWindow(this), $"Could not delete the crop file.\n\n{ex.Message}",
+                    "Un-save crop", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            _batchCrops.Remove(crop);
+            BumpCount(crop.ClassName, -1);
+            _sessionTotal = Math.Max(0, _sessionTotal - 1);
+
+            obj.IsExported = false;
+            Canvas.RedrawAll();
+            RefreshSessionTotal();
+            UpdateStatus($"Removed {Path.GetFileName(crop.SavedPath)} — relabel the region and press Add Data again.");
+        }
+
         private void BumpCount(string className, int delta)
         {
             var existing = _sessionCounts.FirstOrDefault(c =>
                 string.Equals(c.ClassName, className, StringComparison.OrdinalIgnoreCase));
-            if (existing != null) { existing.Count += delta; return; }
-            _sessionCounts.Add(new ClassCount { ClassName = className, Count = delta });
+
+            if (existing == null)
+            {
+                if (delta > 0) _sessionCounts.Add(new ClassCount { ClassName = className, Count = delta });
+                return;
+            }
+
+            existing.Count += delta;
+            // A label that drops back to nothing should leave the list rather than sit at zero.
+            if (existing.Count <= 0) _sessionCounts.Remove(existing);
         }
 
-        private void RefreshSessionTotal() =>
-            SessionTotalText.Text = _sessionTotal == 0
-                ? ""
-                : $"{_sessionTotal} crop{(_sessionTotal == 1 ? "" : "s")} saved this session";
+        private void RefreshSessionTotal()
+        {
+            if (_sessionTotal == 0) { SessionTotalText.Text = ""; return; }
+
+            var session = $"{_sessionTotal} crop{(_sessionTotal == 1 ? "" : "s")} this session";
+            SessionTotalText.Text = _batchCrops.Count == 0
+                ? session
+                : $"{_batchCrops.Count} in open batch  ·  {session}";
+        }
 
         // =====================================================================
         // Labels (reuses the shared class library)
@@ -363,6 +580,36 @@ namespace CameraCalibrationStudio.Views
             UpdateActiveClassDisplay();
         }
 
+        /// <summary>Rebuilds the numbered label list. Nine because that is how many number keys
+        /// there are; a library larger than that still works through the picker.</summary>
+        private void RefreshLabelShortcuts()
+        {
+            _labelShortcuts.Clear();
+            int number = 1;
+            foreach (var cls in _classLibrary.OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase).Take(9))
+                _labelShortcuts.Add(new LabelShortcut { Number = number++, Label = cls });
+        }
+
+        private void LabelShortcut_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            if (sender is not FrameworkElement fe || fe.DataContext is not LabelShortcut shortcut) return;
+            SetActiveClass(shortcut.Label);
+            UpdateStatus($"Active label: {shortcut.Label.Name}");
+            e.Handled = true;
+        }
+
+        private void ApplyLabelShortcut(int number)
+        {
+            var shortcut = _labelShortcuts.FirstOrDefault(s => s.Number == number);
+            if (shortcut == null)
+            {
+                UpdateStatus($"No label bound to {number} yet — add one with + New Label.", isWarning: true);
+                return;
+            }
+            SetActiveClass(shortcut.Label);
+            UpdateStatus($"Active label: {shortcut.Label.Name}");
+        }
+
         private void UpdateActiveClassDisplay()
         {
             if (_activeClass == null)
@@ -382,6 +629,7 @@ namespace CameraCalibrationStudio.Views
             var dlg = new ClassPickerDialog(_classLibrary, "Set Label") { Owner = Window.GetWindow(this) };
             var ok = dlg.ShowDialog();
             ClassLibraryStore.Save(_classLibrary);
+            RefreshLabelShortcuts(); // the picker can create labels, so the numbered list follows it
             if (ok != true) return;
 
             if (dlg.Outcome == ClassPickerOutcome.Selected) SetActiveClass(dlg.SelectedClass);
@@ -403,6 +651,7 @@ namespace CameraCalibrationStudio.Views
             };
             _classLibrary.Add(newClass);
             ClassLibraryStore.Save(_classLibrary);
+            RefreshLabelShortcuts();
             SetActiveClass(newClass);
         }
 
@@ -413,6 +662,7 @@ namespace CameraCalibrationStudio.Views
             if (!dlg.LibraryChanged) return;
             UpdateObjectSwatches();
             UpdateActiveClassDisplay();
+            RefreshLabelShortcuts();
             Canvas.RedrawAll();
         }
 
@@ -434,6 +684,7 @@ namespace CameraCalibrationStudio.Views
             var picker = new ClassPickerDialog(_classLibrary, "Label this region") { Owner = Window.GetWindow(this) };
             var result = picker.ShowDialog();
             ClassLibraryStore.Save(_classLibrary);
+            RefreshLabelShortcuts();
 
             if (result == true && picker.Outcome == ClassPickerOutcome.Selected && picker.SelectedClass != null)
             {
@@ -593,9 +844,27 @@ namespace CameraCalibrationStudio.Views
                 if (Canvas.Selected != null) DuplicateRegion(Canvas.Selected);
                 e.Handled = true;
             }
+            // Zoom-to-100% moves to Ctrl+1 here, unlike the rest of the app: in a labelling tool
+            // the bare number keys are worth more spent on labels, which get pressed constantly.
+            else if (ctrl && (e.Key == Key.D1 || e.Key == Key.NumPad1)) { Canvas.SetZoomPercent(100); e.Handled = true; }
             else if (!typing && e.Key == Key.Delete) { Canvas.DeleteSelected(); e.Handled = true; }
             else if (!typing && e.Key == Key.F) { Canvas.FitToWindow(); e.Handled = true; }
-            else if (!typing && e.Key == Key.D1) { Canvas.SetZoomPercent(100); e.Handled = true; }
+            else if (!typing && !ctrl && e.Key == Key.N) { StepFolder(+1); e.Handled = true; }
+            else if (!typing && !ctrl && e.Key == Key.P) { StepFolder(-1); e.Handled = true; }
+            else if (!typing && !ctrl && TryGetLabelNumber(e.Key, out int number))
+            {
+                ApplyLabelShortcut(number);
+                e.Handled = true;
+            }
+        }
+
+        /// <summary>Maps 1-9 (and their numpad twins) to a label slot.</summary>
+        private static bool TryGetLabelNumber(Key key, out int number)
+        {
+            if (key >= Key.D1 && key <= Key.D9) { number = key - Key.D1 + 1; return true; }
+            if (key >= Key.NumPad1 && key <= Key.NumPad9) { number = key - Key.NumPad1 + 1; return true; }
+            number = 0;
+            return false;
         }
 
         private void DuplicateRegion(CalibrationObjectBase obj)
@@ -640,6 +909,16 @@ namespace CameraCalibrationStudio.Views
                 set { _count = value; PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(nameof(Count))); }
             }
             public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
+        }
+
+        /// <summary>One numbered entry in the sidebar's label list, bound to a number key.</summary>
+        public sealed class LabelShortcut
+        {
+            public int Number { get; init; }
+            public CalibrationClass Label { get; init; } = null!;
+
+            public string Name => Label.Name;
+            public Brush SwatchBrush => Label.SwatchBrush;
         }
     }
 }

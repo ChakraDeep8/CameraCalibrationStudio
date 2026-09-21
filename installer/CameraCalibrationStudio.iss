@@ -61,6 +61,9 @@ Source: "..\publish\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs cr
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
+; The Data Builder is the same binary launched straight into that workspace, so the labelling
+; workflow gets its own Start Menu entry without a second application to build and ship.
+Name: "{group}\Data Builder"; Filename: "{app}\{#MyAppExeName}"; Parameters: "--data-builder"; Comment: "Label frames and export a training set"
 Name: "{group}\Uninstall {#MyAppName}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 

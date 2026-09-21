@@ -49,6 +49,36 @@ namespace CameraCalibrationStudio
             FilterGallery.ItemsSource = _filters;
             SourceInitialized += MainWindow_SourceInitialized;
             MainWindow_StateChanged(this, EventArgs.Empty);
+
+            if (LaunchedAsDataBuilder()) ApplyDataBuilderOnlyMode();
+        }
+
+        // =====================================================================
+        // Data Builder launch mode
+        // =====================================================================
+
+        /// <summary>
+        /// The Data Builder doubles as its own application: launched with --data-builder (the
+        /// installer creates a second shortcut that does exactly that) the window presents only
+        /// that workspace. One binary and one installer still, rather than a second app to build,
+        /// ship and keep in step — the labelling workflow just gets its own front door.
+        /// </summary>
+        private static bool LaunchedAsDataBuilder() =>
+            Environment.GetCommandLineArgs().Skip(1).Any(arg =>
+                arg.Equals("--data-builder", StringComparison.OrdinalIgnoreCase) ||
+                arg.Equals("--databuilder", StringComparison.OrdinalIgnoreCase));
+
+        private void ApplyDataBuilderOnlyMode()
+        {
+            Title = "Data Builder";
+            TitleBarText.Text = "Data Builder";
+
+            // Collapsed rather than removed: the Image Editor's controls stay alive as fields
+            // that this window's own handlers still reference, so tearing their tab out of the
+            // visual tree would be a needless way to break them.
+            RoiTab.Visibility = Visibility.Collapsed;
+            EditorTab.Visibility = Visibility.Collapsed;
+            MainTabs.SelectedItem = DataBuilderTab;
         }
 
         // =====================================================================

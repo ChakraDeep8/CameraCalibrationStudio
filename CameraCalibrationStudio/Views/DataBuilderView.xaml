@@ -11,8 +11,19 @@
                 <Border Style="{StaticResource ToolbarGroup}">
                     <StackPanel Orientation="Horizontal">
                         <Button Content="Open Image" Click="OpenImage_Click" Style="{StaticResource ToolButton}"/>
+                        <Button Content="Open Folder…" ToolTip="Label a whole folder of frames — step through them with N and P"
+                                Click="OpenFolder_Click" Style="{StaticResource ToolButton}"/>
                         <Button Content="Grab Frame from RTSP…" Click="GrabRtsp_Click" Style="{StaticResource ToolButton}"/>
                         <Button Content="Grab Frame from Video…" Click="GrabVideo_Click" Style="{StaticResource ToolButton}"/>
+                    </StackPanel>
+                </Border>
+                <Border Style="{StaticResource ToolbarGroup}">
+                    <StackPanel Orientation="Horizontal">
+                        <Button Content="◀" ToolTip="Previous frame in the folder (P)" Click="PrevImage_Click" Style="{StaticResource ToolButton}"/>
+                        <TextBlock x:Name="FolderPositionText" Text="—" Foreground="{StaticResource TextSecondary}" FontSize="11.5"
+                                   VerticalAlignment="Center" MinWidth="58" TextAlignment="Center"
+                                   ToolTip="Position in the opened folder"/>
+                        <Button Content="▶" ToolTip="Next frame in the folder (N)" Click="NextImage_Click" Style="{StaticResource ToolButton}"/>
                     </StackPanel>
                 </Border>
                 <Border Style="{StaticResource ToolbarGroup}">
@@ -32,7 +43,7 @@
                 <Border Style="{StaticResource ToolbarGroup}">
                     <StackPanel Orientation="Horizontal">
                         <Button Content="Fit" ToolTip="F" Click="Fit_Click" Style="{StaticResource ToolButton}"/>
-                        <Button Content="100%" ToolTip="1" Click="Zoom100_Click" Style="{StaticResource ToolButton}"/>
+                        <Button Content="100%" ToolTip="Ctrl+1 — the plain number keys pick labels here" Click="Zoom100_Click" Style="{StaticResource ToolButton}"/>
                     </StackPanel>
                 </Border>
             </StackPanel>
@@ -104,6 +115,35 @@
                             <Button Grid.Column="1" Content="Manage" Click="ManageClasses_Click" Style="{StaticResource ToolButton}" Margin="3,0,0,0"/>
                         </Grid>
 
+                        <!-- The first nine labels, bound to the number keys. Listing them here is
+                             what makes those shortcuts discoverable rather than folklore. -->
+                        <ItemsControl x:Name="LabelShortcutList" Margin="0,0,0,10">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Background="#17171C" CornerRadius="4" Padding="6,4" Margin="0,0,0,3"
+                                            Cursor="Hand" MouseLeftButtonDown="LabelShortcut_MouseLeftButtonDown"
+                                            ToolTip="Click, or press its number, to make this the active label">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Border Grid.Column="0" Background="{StaticResource TileBackgroundHover}" CornerRadius="3"
+                                                    Width="16" Height="16" Margin="0,0,7,0">
+                                                <TextBlock Text="{Binding Number}" Foreground="{StaticResource TextSecondary}"
+                                                           FontSize="10" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                            </Border>
+                                            <Ellipse Grid.Column="1" Width="8" Height="8" Fill="{Binding SwatchBrush}"
+                                                     VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                            <TextBlock Grid.Column="2" Text="{Binding Name}" Foreground="{StaticResource TextPrimary}"
+                                                       FontSize="11.5" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
                         <Grid Margin="0,0,0,10">
                             <TextBlock Text="Padding around crop (px)" Foreground="{StaticResource TextSecondary}" FontSize="11" HorizontalAlignment="Left"/>
                             <TextBlock x:Name="PaddingValueText" Text="0" Foreground="{StaticResource TextSecondary}" FontSize="11" HorizontalAlignment="Right"/>
@@ -133,6 +173,11 @@
                                                 <TextBlock Text="✓" Foreground="#5BD68A" FontSize="12" VerticalAlignment="Center"
                                                            ToolTip="Already saved — Add Data will skip it" Margin="0,0,2,0"
                                                            Visibility="{Binding IsExported, Converter={StaticResource BoolToVisibility}}"/>
+                                                <TextBlock Text="↶" Foreground="{StaticResource TextSecondary}" FontSize="12" Cursor="Hand"
+                                                           VerticalAlignment="Center" Margin="4,0,0,0"
+                                                           ToolTip="Un-save this crop — deletes the file so you can relabel it and add it again"
+                                                           MouseLeftButtonDown="UnExportRegion_MouseLeftButtonDown"
+                                                           Visibility="{Binding IsExported, Converter={StaticResource BoolToVisibility}}"/>
                                                 <TextBlock Text="✎" Foreground="{StaticResource TextSecondary}" Cursor="Hand" ToolTip="Rename"
                                                            MouseLeftButtonDown="RenameRegion_MouseLeftButtonDown" Margin="6,0,0,0"/>
                                                 <TextBlock Text="✕" Foreground="{StaticResource TextSecondary}" Cursor="Hand" ToolTip="Delete"
@@ -145,6 +190,8 @@
                         </Border>
 
                         <TextBlock Text="SAVED THIS SESSION" Style="{StaticResource SectionLabel}" Margin="0,0,0,4"/>
+                        <TextBlock Text="Totals run across the whole session, not just the open batch — Save Database closes a batch without resetting these."
+                                   Foreground="{StaticResource TextSecondary}" FontSize="10.5" TextWrapping="Wrap" Margin="0,0,0,4"/>
                         <Border Background="#17171C" CornerRadius="4" BorderBrush="{StaticResource BorderSubtle}"
                                 BorderThickness="1" MaxHeight="200">
                             <ItemsControl x:Name="SessionCountsList" Margin="8">

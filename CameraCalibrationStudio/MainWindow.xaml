@@ -30,7 +30,7 @@
 
                 <StackPanel Orientation="Horizontal" Margin="14,0,0,0" VerticalAlignment="Center" shell:WindowChrome.IsHitTestVisibleInChrome="False">
                     <Image Source="Assets/logo.png" Width="18" Height="18" Margin="0,0,9,0"/>
-                    <TextBlock Text="Camera Calibration &amp; Image Studio" Foreground="{StaticResource TextPrimary}"
+                    <TextBlock x:Name="TitleBarText" Text="Camera Calibration &amp; Image Studio" Foreground="{StaticResource TextPrimary}"
                                FontSize="12.5" FontWeight="SemiBold" VerticalAlignment="Center"/>
                 </StackPanel>
 
@@ -61,12 +61,12 @@
                 </TabControl.Template>
 
                 <!-- ============================ ROI CALIBRATION TAB (primary workflow) ============================ -->
-                <TabItem Header="ROI Calibration" Style="{StaticResource DarkTab}">
+                <TabItem x:Name="RoiTab" Header="ROI Calibration" Style="{StaticResource DarkTab}">
                     <views:RoiCalibrationView x:Name="RoiView"/>
                 </TabItem>
 
                 <!-- ============================ EDITOR TAB ============================ -->
-                <TabItem Header="Image Editor" Style="{StaticResource DarkTab}">
+                <TabItem x:Name="EditorTab" Header="Image Editor" Style="{StaticResource DarkTab}">
                     <DockPanel LastChildFill="True">
 
                         <!-- Always-visible status bar -->
@@ -171,7 +171,7 @@
                 </TabItem>
 
                 <!-- ============================ DATA BUILDER TAB ============================ -->
-                <TabItem Header="Data Builder" Style="{StaticResource DarkTab}">
+                <TabItem x:Name="DataBuilderTab" Header="Data Builder" Style="{StaticResource DarkTab}">
                     <views:DataBuilderView x:Name="DataBuilderView"/>
                 </TabItem>
 
