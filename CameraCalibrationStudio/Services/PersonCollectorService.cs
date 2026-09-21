@@ -28,6 +28,11 @@ namespace CameraCalibrationStudio.Services
         /// <summary>Frozen on the worker thread before it is handed over — a Mat never crosses
         /// threads, and a frozen BitmapSource is safe to touch from the UI.</summary>
         public BitmapSource? Preview { get; init; }
+
+        /// <summary>Thumbnails of the crops this sample just wrote, so the window can show what
+        /// is actually being collected rather than only what the camera sees. Frozen, like the
+        /// preview.</summary>
+        public IReadOnlyList<BitmapSource>? NewCrops { get; init; }
     }
 
     public sealed class CollectionSummary
@@ -120,14 +125,14 @@ namespace CameraCalibrationStudio.Services
                     nextSample = clock.Elapsed + options.SampleInterval;
                     framesSampled++;
 
-                    var (written, dupes, weak, error) = SampleFrame(frame, options, duplicates, framesSampled);
-                    if (error != null) { stoppedBecause = "write failed"; Report(progress, error); break; }
+                    var sample = SampleFrame(frame, options, duplicates, framesSampled);
+                    if (sample.Error != null) { stoppedBecause = "write failed"; Report(progress, sample.Error); break; }
 
-                    saved.AddRange(written);
-                    duplicatesSkipped += dupes;
-                    lowQualitySkipped += weak;
+                    saved.AddRange(sample.Written);
+                    duplicatesSkipped += sample.Duplicates;
+                    lowQualitySkipped += sample.LowQuality;
 
-                    Report(progress, null, Preview(frame));
+                    Report(progress, null, Preview(frame), sample.Thumbnails);
                 }
 
                 string? manifest = null;
@@ -170,9 +175,11 @@ namespace CameraCalibrationStudio.Services
                 Error = error
             };
 
-            void Report(IProgress<CollectionProgress>? sink, string? message, BitmapSource? preview = null) =>
+            void Report(IProgress<CollectionProgress>? sink, string? message, BitmapSource? preview = null,
+                IReadOnlyList<BitmapSource>? newCrops = null) =>
                 sink?.Report(new CollectionProgress
                 {
+                    NewCrops = newCrops,
                     FramesSampled = framesSampled,
                     CropsSaved = saved.Count,
                     DuplicatesSkipped = duplicatesSkipped,
@@ -185,8 +192,15 @@ namespace CameraCalibrationStudio.Services
                 });
         }
 
+        private sealed record SampleOutcome(
+            List<CropResult> Written,
+            int Duplicates,
+            int LowQuality,
+            string? Error,
+            IReadOnlyList<BitmapSource>? Thumbnails);
+
         /// <summary>Detects people in one sampled frame and writes the crops worth keeping.</summary>
-        private static (List<CropResult> Written, int Duplicates, int LowQuality, string? Error) SampleFrame(
+        private static SampleOutcome SampleFrame(
             Mat frame, CollectionRunOptions options, CropSimilarityIndex duplicates, int sampleNumber)
         {
             var written = new List<CropResult>();
@@ -198,6 +212,8 @@ namespace CameraCalibrationStudio.Services
                 .ToList();
 
             var keep = new List<CalibrationObjectBase>();
+            var thumbnails = new List<BitmapSource>();
+
             foreach (var person in people)
             {
                 var box = person.Bounds;
@@ -211,6 +227,11 @@ namespace CameraCalibrationStudio.Services
                 if (duplicates.IsDuplicate(crop, box, nowUtc)) { dupes++; continue; }
                 duplicates.Remember(crop, box, nowUtc);
 
+                // Built from the crop already in hand for the duplicate check, rather than
+                // re-reading the file back off disk after it is written.
+                var thumbnail = Thumbnail(crop);
+                if (thumbnail != null) thumbnails.Add(thumbnail);
+
                 keep.Add(new RectangleObject
                 {
                     // No ClassId: CropExportService falls back to the region's own name for the
@@ -220,7 +241,7 @@ namespace CameraCalibrationStudio.Services
                 });
             }
 
-            if (keep.Count == 0) return (written, dupes, weak, null);
+            if (keep.Count == 0) return new SampleOutcome(written, dupes, weak, null, null);
 
             try
             {
@@ -232,10 +253,35 @@ namespace CameraCalibrationStudio.Services
             }
             catch (Exception ex)
             {
-                return (written, dupes, weak, $"Could not write crops: {ex.Message}");
+                return new SampleOutcome(written, dupes, weak, $"Could not write crops: {ex.Message}", null);
             }
 
-            return (written, dupes, weak, null);
+            // Only show thumbnails when every kept region really was written. The alternative —
+            // pairing them up by index — would quietly mislabel the strip if the export skipped
+            // one, and showing a crop that isn't on disk is worse than showing none.
+            var shown = written.Count == thumbnails.Count ? thumbnails : null;
+            return new SampleOutcome(written, dupes, weak, null, shown);
+        }
+
+        /// <summary>A small frozen thumbnail of one crop, safe to hand to the UI thread.</summary>
+        private static BitmapSource? Thumbnail(Mat crop)
+        {
+            try
+            {
+                double scale = Math.Min(1.0, 120.0 / Math.Max(crop.Width, crop.Height));
+                using var small = new Mat();
+                Cv2.Resize(crop, small,
+                    new OpenCvSharp.Size(Math.Max(1, (int)(crop.Width * scale)), Math.Max(1, (int)(crop.Height * scale))),
+                    interpolation: InterpolationFlags.Area);
+
+                var bitmap = small.ToBitmapSource();
+                bitmap.Freeze();
+                return bitmap;
+            }
+            catch
+            {
+                return null;
+            }
         }
 
         /// <summary>

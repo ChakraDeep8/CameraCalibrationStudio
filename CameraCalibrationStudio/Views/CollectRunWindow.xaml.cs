@@ -1,10 +1,12 @@
 using System;
+using System.Collections.ObjectModel;
 using System.Globalization;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media.Imaging;
 using CameraCalibrationStudio.Models.Roi;
 using CameraCalibrationStudio.Services;
 using Microsoft.Win32;
@@ -22,14 +24,44 @@ namespace CameraCalibrationStudio.Views
         private CancellationTokenSource? _cancellation;
         private Task<CollectionSummary>? _run;
 
+        /// <summary>Most recent crops, newest first. Bounded because a long run would otherwise
+        /// accumulate thumbnails for every person it ever saw.</summary>
+        private readonly ObservableCollection<BitmapSource> _savedCrops = new();
+        private const int MaxShownCrops = 24;
+
         private bool IsRunning => _run is { IsCompleted: false };
 
         public CollectRunWindow()
         {
             InitializeComponent();
 
+            SavedCropsList.ItemsSource = _savedCrops;
+            LoadSavedCameras();
+
             UrlBox.Text = DataBuilderSettings.LoadCollectUrl();
             OutputBox.Text = DataBuilderSettings.LoadOutputFolder();
+        }
+
+        /// <summary>Offers the cameras the RTSP Camera Viewer has saved, so a stream can be picked
+        /// rather than retyped — the URL box stays editable for anything not in that list.</summary>
+        private void LoadSavedCameras()
+        {
+            SavedCamerasCombo.Items.Add(new CameraOption("— pick a saved camera —", ""));
+            foreach (var (name, url) in ProfileStore.LoadRtspViewerCameras())
+                SavedCamerasCombo.Items.Add(new CameraOption(name, url));
+
+            SavedCamerasCombo.SelectedIndex = 0;
+        }
+
+        private void SavedCameras_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (SavedCamerasCombo.SelectedItem is CameraOption option && !string.IsNullOrEmpty(option.Url))
+                UrlBox.Text = option.Url;
+        }
+
+        private sealed record CameraOption(string Name, string Url)
+        {
+            public override string ToString() => string.IsNullOrEmpty(Url) ? Name : $"{Name}   ({Url})";
         }
 
         // =====================================================================
@@ -161,6 +193,17 @@ namespace CameraCalibrationStudio.Views
             ReconnectsText.Text = progress.Reconnects.ToString();
 
             if (progress.Preview != null) PreviewImage.Source = progress.Preview;
+
+            if (progress.NewCrops is { Count: > 0 })
+            {
+                CropsPlaceholder.Visibility = Visibility.Collapsed;
+                foreach (var crop in progress.NewCrops)
+                {
+                    _savedCrops.Insert(0, crop); // newest first, so the latest is always in view
+                    while (_savedCrops.Count > MaxShownCrops) _savedCrops.RemoveAt(_savedCrops.Count - 1);
+                }
+                CropsScroller.ScrollToHome();
+            }
 
             var parts = new System.Collections.Generic.List<string>
             {

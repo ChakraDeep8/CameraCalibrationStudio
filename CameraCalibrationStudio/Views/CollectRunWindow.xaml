@@ -29,8 +29,11 @@
             <StackPanel x:Name="SettingsPanel">
 
                 <TextBlock Text="STREAM" Style="{StaticResource SectionLabel}" Margin="0,0,0,4"/>
+                <ComboBox x:Name="SavedCamerasCombo" Margin="0,0,0,4"
+                          ToolTip="Cameras saved by the RTSP Camera Viewer"
+                          SelectionChanged="SavedCameras_SelectionChanged"/>
                 <TextBox x:Name="UrlBox" Style="{StaticResource InputBox}" Margin="0,0,0,10"
-                         ToolTip="rtsp://user:pass@host:554/stream"/>
+                         ToolTip="rtsp://user:pass@host:554/stream — pick a saved camera above, or type any URL here"/>
 
                 <TextBlock Text="DATASET FOLDER" Style="{StaticResource SectionLabel}" Margin="0,0,0,4"/>
                 <TextBox x:Name="OutputBox" Style="{StaticResource InputBox}" Margin="0,0,0,4"/>
@@ -112,6 +115,7 @@
             <Grid.RowDefinitions>
                 <RowDefinition Height="*"/>
                 <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
 
             <Border Grid.Row="0" Background="#101014" CornerRadius="6" BorderBrush="{StaticResource BorderSubtle}" BorderThickness="1">
@@ -123,7 +127,34 @@
                 </Grid>
             </Border>
 
-            <Border Grid.Row="1" Background="{StaticResource PanelBackground}" CornerRadius="6" Padding="12,10" Margin="0,10,0,0">
+            <!-- What has actually been collected, as it lands. -->
+            <Border Grid.Row="1" Background="#101014" CornerRadius="6" BorderBrush="{StaticResource BorderSubtle}"
+                    BorderThickness="1" Height="132" Margin="0,10,0,0">
+                <Grid>
+                    <TextBlock x:Name="CropsPlaceholder" Text="Saved crops appear here as they're collected."
+                               Foreground="{StaticResource TextSecondary}" FontSize="11.5"
+                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    <ScrollViewer x:Name="CropsScroller" HorizontalScrollBarVisibility="Auto"
+                                  VerticalScrollBarVisibility="Disabled" Padding="6">
+                        <ItemsControl x:Name="SavedCropsList">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel Orientation="Horizontal"/>
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Background="#17171C" CornerRadius="4" Margin="0,0,6,0" Padding="3">
+                                        <Image Source="{Binding}" Height="104" Stretch="Uniform"/>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </Grid>
+            </Border>
+
+            <Border Grid.Row="2" Background="{StaticResource PanelBackground}" CornerRadius="6" Padding="12,10" Margin="0,10,0,0">
                 <StackPanel>
                     <UniformGrid Columns="4" Margin="0,0,0,8">
                         <StackPanel>
