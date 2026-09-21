@@ -16,6 +16,8 @@
                         <Button Content="Grab Frame from RTSP…" Click="GrabRtsp_Click" Style="{StaticResource ToolButton}"/>
                         <Button Content="Grab Frame from Video…" Click="GrabVideo_Click" Style="{StaticResource ToolButton}"/>
                         <Button Content="Open Calibration" Click="OpenCalibration_Click" Style="{StaticResource ToolButton}"/>
+                        <Button x:Name="MagicButton" Content="✨ Magic" ToolTip="AI calibration suggestions — detects people and circular/square/rectangular objects and proposes regions to review"
+                                Click="Magic_Click" Style="{StaticResource ToolButton}" BorderBrush="{StaticResource AccentBrush}" BorderThickness="1"/>
                         <Button Content="Save Frame…" ToolTip="Save the current frame as an image" Click="SaveFrame_Click" Style="{StaticResource ToolButton}"/>
                         <Button Content="Save Calibration" ToolTip="Ctrl+S" Click="SaveCalibration_Click" Style="{StaticResource PrimaryButton}"/>
                     </StackPanel>
@@ -225,6 +227,35 @@
             <Grid Grid.Column="2" x:Name="CanvasHost" ClipToBounds="True">
                 <controls:RoiCanvas x:Name="Canvas"/>
 
+                <!-- Magic scan overlay: shown only while AiCalibrationService is analyzing the
+                     current frame in the background. Purely visual, hit-test blocking so the
+                     canvas can't be edited mid-scan; RoiCalibrationView toggles Visibility. -->
+                <Border x:Name="MagicOverlay" Visibility="Collapsed" Panel.ZIndex="30"
+                        Background="#B0101014" IsHitTestVisible="True">
+                    <Grid ClipToBounds="True">
+                        <Rectangle x:Name="MagicScanLine" Height="3" VerticalAlignment="Top" HorizontalAlignment="Stretch"
+                                   Fill="{StaticResource AccentBrush}" Opacity="0.9">
+                            <Rectangle.RenderTransform>
+                                <TranslateTransform x:Name="MagicScanLineOffset" Y="0"/>
+                            </Rectangle.RenderTransform>
+                            <Rectangle.Triggers>
+                                <EventTrigger RoutedEvent="Rectangle.Loaded">
+                                    <BeginStoryboard>
+                                        <Storyboard RepeatBehavior="Forever">
+                                            <DoubleAnimation Storyboard.TargetProperty="(Rectangle.RenderTransform).(TranslateTransform.Y)"
+                                                              From="0" To="{Binding ElementName=CanvasHost, Path=ActualHeight}" Duration="0:0:1.4"/>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </EventTrigger>
+                            </Rectangle.Triggers>
+                        </Rectangle>
+                        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <TextBlock Text="✨ Magic is analyzing the frame…" Foreground="{StaticResource TextPrimary}" FontSize="15" FontWeight="SemiBold" HorizontalAlignment="Center"/>
+                            <TextBlock Text="Detecting people, circular, square and rectangular regions" Foreground="{StaticResource TextSecondary}" FontSize="12" HorizontalAlignment="Center" Margin="0,6,0,0"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
                 <!-- Floating draw-tools toolbar. A sibling overlay of the canvas rather than a
                      child of it, so it stays put while the image is panned and zoomed underneath,
                      and takes no space out of the canvas layout. Drag the grip to move it. -->
@@ -245,6 +276,10 @@
                                    MouseLeftButtonDown="FloatingToolsGrip_MouseLeftButtonDown"/>
                         <Border Width="1" Background="#4A4A57" Margin="0,4,5,4"/>
 
+                        <RadioButton x:Name="ToolSelect" Content="↖" GroupName="Tools" IsChecked="True"
+                                     Style="{StaticResource FloatingToolButton}" Checked="Tool_Checked"
+                                     ToolTip="Select (default) — click a region to select it, then:&#10;  • Drag a handle to reshape it&#10;  • Double-click a polygon edge to add a point&#10;  • Ctrl+drag inside it to move the whole region&#10;  • Ctrl+D duplicates the selected region&#10;  • Delete removes the selected region&#10;&#10;Right-click the canvas to grab the palm, right-click again to go back."/>
+                        <Border Width="1" Background="#4A4A57" Margin="5,4"/>
                         <RadioButton x:Name="ToolRectangle" Content="▭" GroupName="Tools" ToolTip="Rectangle — click and drag to create a region"
                                      Style="{StaticResource FloatingToolButton}" Checked="Tool_Checked"/>
                         <RadioButton x:Name="ToolSquare" Content="□" GroupName="Tools" ToolTip="Square — click and drag; width and height stay equal"
@@ -256,10 +291,6 @@
                         <Border Width="1" Background="#4A4A57" Margin="5,4"/>
                         <RadioButton x:Name="ToolPan" Content="✋" GroupName="Tools" ToolTip="Pan — drag to move around the image, or hold Space with any tool. Mouse wheel zooms"
                                      Style="{StaticResource FloatingToolButton}" Checked="Tool_Checked"/>
-                        <Border Width="1" Background="#4A4A57" Margin="5,4"/>
-                        <TextBlock Text="?" Foreground="{StaticResource TextSecondary}" FontSize="13" FontWeight="SemiBold"
-                                   VerticalAlignment="Center" Margin="5,0,6,0" Cursor="Help"
-                                   ToolTip="Editing an existing region:&#10;  • Click it to select — its point handles appear&#10;  • Drag a handle to reshape it&#10;  • Double-click a polygon edge to add a point&#10;  • Ctrl+drag inside it to move the whole region&#10;  • Ctrl+D duplicates the selected region&#10;  • Delete removes the selected region&#10;&#10;Right-click the canvas to grab the palm, right-click again to go back."/>
                     </StackPanel>
                 </Border>
 

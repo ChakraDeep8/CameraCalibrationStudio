@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.IO;
@@ -577,7 +578,7 @@ namespace CameraCalibrationStudio.Views
                 _ when sender == ToolPolygon => ToolMode.Polygon,
                 _ when sender == ToolLine => ToolMode.Line,
                 _ when sender == ToolPan => ToolMode.Pan,
-                _ => ToolMode.Select
+                _ => ToolMode.Select // includes ToolSelect
             };
             Canvas.RedrawAll();
         }
@@ -654,14 +655,11 @@ namespace CameraCalibrationStudio.Views
             if (button != null) button.IsChecked = true; // fires Tool_Checked, which sets Canvas.Tool
         }
 
+        /// <summary>Checking ToolSelect (same GroupName="Tools" as every draw/pan radio) auto-unchecks
+        /// whichever one was active and fires Tool_Checked, which sets Canvas.Tool = Select.</summary>
         private void ResetToolToSelect()
         {
-            ToolRectangle.IsChecked = false;
-            ToolSquare.IsChecked = false;
-            ToolPolygon.IsChecked = false;
-            ToolLine.IsChecked = false;
-            ToolPan.IsChecked = false;
-            Canvas.Tool = ToolMode.Select;
+            ToolSelect.IsChecked = true;
         }
 
         // =====================================================================
@@ -743,6 +741,81 @@ namespace CameraCalibrationStudio.Views
             if (ContinuousDrawRadio.IsChecked != true)
                 ResetToolToSelect();
 
+            RefreshAll();
+        }
+
+        // =====================================================================
+        // Magic — AI calibration suggestions
+        // =====================================================================
+
+        /// <summary>
+        /// Runs AiCalibrationService against the full-resolution source frame in the background
+        /// (with the scanning overlay covering the canvas so nothing can be edited mid-run),
+        /// then hands every candidate to MagicSuggestionsDialog for review. Nothing is written
+        /// to the document until the technician applies selections there — accepted suggestions
+        /// become ordinary CalibrationObjectBase instances, indistinguishable from and as fully
+        /// editable as anything hand-drawn.
+        /// </summary>
+        private async void Magic_Click(object sender, RoutedEventArgs e)
+        {
+            if (_originalMat == null || !_document.HasImage)
+            {
+                MessageBox.Show(Window.GetWindow(this), "Open an image first.", "Magic", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            var optionsDlg = new MagicOptionsDialog { Owner = Window.GetWindow(this) };
+            if (optionsDlg.ShowDialog() != true || optionsDlg.Result == null) return;
+            var options = optionsDlg.Result;
+
+            // Say so plainly rather than quietly degrading: without the model this falls back to
+            // the far weaker HOG pedestrian detector, and results that look like "the AI is bad"
+            // are really "the AI never ran".
+            if (options.UseYolo && !YoloObjectDetector.IsAvailable)
+            {
+                MessageBox.Show(Window.GetWindow(this),
+                    "The YOLOv8 model file couldn't be loaded, so Magic is falling back to the basic "
+                    + "pedestrian detector.\n\nExpect far weaker results — it only looks for people, and "
+                    + "only at a distance. Check that Assets\\Models\\yolov8s.onnx sits next to the "
+                    + "application executable.",
+                    "Magic — model unavailable", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+
+            MagicButton.IsEnabled = false;
+            MagicOverlay.Visibility = Visibility.Visible;
+
+            List<AiSuggestion> suggestions;
+            try
+            {
+                using var frame = _originalMat.Clone();
+                suggestions = await Task.Run(() => AiCalibrationService.DetectSuggestions(frame, options));
+            }
+            catch (Exception ex)
+            {
+                MagicOverlay.Visibility = Visibility.Collapsed;
+                MagicButton.IsEnabled = true;
+                MessageBox.Show(Window.GetWindow(this), $"Magic couldn't analyze this frame:\n{ex.Message}", "Magic", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            MagicOverlay.Visibility = Visibility.Collapsed;
+            MagicButton.IsEnabled = true;
+
+            var dlg = new MagicSuggestionsDialog(suggestions, _classLibrary) { Owner = Window.GetWindow(this) };
+            if (dlg.ShowDialog() != true || dlg.Accepted.Count == 0) return;
+
+            _history.Snapshot(_document.Objects);
+            foreach (var suggestion in dlg.Accepted)
+            {
+                var obj = suggestion.ToCalibrationObject();
+                obj.Name = NextAvailableName(string.IsNullOrWhiteSpace(obj.Name) ? suggestion.DetectedLabel : obj.Name);
+                _document.Objects.Add(obj);
+            }
+
+            UpdateObjectSwatches();
+            RefreshClassFilterCombo();
+            Canvas.RedrawAll();
+            _dirty = true;
             RefreshAll();
         }
 

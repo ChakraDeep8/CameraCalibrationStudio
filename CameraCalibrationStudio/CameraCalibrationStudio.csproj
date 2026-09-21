@@ -11,16 +11,26 @@
     <Platforms>x64</Platforms>
     <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
     <ApplicationIcon>Assets\logo.ico</ApplicationIcon>
+    <Version>1.3.0</Version>
+    <!-- The app has no localized UI text, so publishing WPF's satellite resource DLLs for
+         every language (zh-Hans, zh-Hant, ja, ko, ...) is dead weight the installer would
+         otherwise have to carry — this alone was most of the publish output's size. -->
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
   </PropertyGroup>
 
   <ItemGroup>
     <Resource Include="Assets\logo.png" />
+    <!-- Bundled YOLOv8s ONNX weights (Ultralytics, AGPL-3.0) that power Magic's real object
+         detector — see Services/YoloObjectDetector.cs. Copied next to the exe on every
+         build/publish so it ships inside the installer without any first-run download. -->
+    <None Include="Assets\Models\yolov8s.onnx" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="OpenCvSharp4" Version="4.10.0.20241108" />
     <PackageReference Include="OpenCvSharp4.runtime.win" Version="4.10.0.20241108" />
     <PackageReference Include="OpenCvSharp4.WpfExtensions" Version="4.10.0.20241108" />
+    <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.20.1" />
   </ItemGroup>
 
 </Project>
